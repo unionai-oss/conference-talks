@@ -1,0 +1,19 @@
+{
+  "name": "conference-talks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev sample-talk/slides.md --open",
+    "dev:sample": "slidev sample-talk/slides.md --open",
+    "build": "slidev build sample-talk/slides.md",
+    "build:sample": "slidev build sample-talk/slides.md",
+    "export": "slidev export sample-talk/slides.md",
+    "export:sample": "slidev export sample-talk/slides.md"
+  },
+  "devDependencies": {
+    "@slidev/cli": "^52.0.0"
+  },
+  "dependencies": {
+    "@slidev/theme-seriph": "^0.25.0"
+  }
+}
