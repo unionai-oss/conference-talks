@@ -84,8 +84,8 @@ layout: center
 
 The problem isn't that agents fail.
 
-It's that recovering from failure is virtually impossible without the full context of how the infrastructure, networking, logical, and semantic layers interact so that the agent can figure out
-how to recover from it.
+It's that recovering from failure is challenging without the full context of how the infrastructure, networking,
+logical, and semantic layers interact so that the agent can figure out how to recover from it.
 
 ---
 layout: center
@@ -104,9 +104,9 @@ layout: default
 # Design Principles for Self-Healing Agents
 
 1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
-1. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
-1. **Make failures cheap** — global cache, run-level replay log, and state persistence
-1. **Infrastructure-level context** — agents see and fix OOM/network; request more resources
+1. **Durability & observability hooks** — `@env.task`, `@flyte.trace` works with any framework/stack
+1. **Make failures cheap** — global caching, run-level replay log, and state persistence
+1. **Infrastructure as context** — agents see and fix OOM/network errors; request more resources
 1. **Agent self-service utilities** — secure tool building and orchestration
 1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
 
@@ -129,19 +129,24 @@ layout: default
 layout: default
 ---
 
-# The Context and Evaluation Gap
+# The context and evaluation gap
 
-Your evals test **semantic correctness**: *"Does it answer correctly?"*
-
-They often **miss**:
-
-- Does it survive a network timeout?
-- Does it recover from OOM?
-- Does it preserve state across retries?
+Your evals typically test **semantic correctness**: *"Does it answer correctly?"*. Likewise, agents
+typically focus on recovering from semantic failures: *"I need more context about topic X to answer correctly"*.
 
 <v-clicks>
 
-**💡 Insight:** Agents can recover from errors at all the layers in the agent stack,
+Agents often don't directly reason about:
+
+- Surviving a network timeout
+- Recovering from OOM errors
+- Recalling state across retries
+
+</v-clicks>
+
+<v-clicks>
+
+**💡 Insight:** agents can recover from errors at all the layers of the agent stack,
 even infrastructure-level failures, but only with the right context and tools ✅.
 
 </v-clicks>
@@ -275,6 +280,28 @@ layout: two-cols-header
 
 # Global Caching
 
+Avoid re-executing work whose outcome can be **shared across all agent runs** — same task + same inputs → reuse cached result.
+
+::left::
+
+- Cache key: inputs + task name + interface hash + (optional) version
+- `behavior="auto"`: cache version from source-code hash; invalidates when code changes
+- `behavior="override"`: pin a version for stable cache across deploys
+- Project/domain isolation so dev/staging/prod caches don’t collide
+
+::right::
+
+```python
+@env.task(cache="auto")
+async def fetch_embeddings(text: str) -> list[float]:
+    # Shared across all runs with same input — no re-run
+    return await embed(text)
+```
+
+<!--
+Example should show cache task decorator and consuming driver task calling it multiple times
+show a mermaid diagram showing how caching works
+-->
 
 ---
 layout: two-cols-header
@@ -282,6 +309,27 @@ layout: two-cols-header
 
 # Automatic state persistence
 
+**Abstract away** serializing and deserializing state (memory, data) to object store. Pass references or materialized structs between tasks; Flyte handles upload/download and format.
+
+::left::
+
+- **Materialized**: dataclasses, Pydantic — full content serialized between tasks
+- **Offloaded**: `File`, `Dir`, `DataFrame` — stored in blob store; tasks get references, data fetched on use
+- Same types work as inputs/outputs; no manual `pickle` or bucket plumbing for agent state
+
+::right::
+
+```python
+@env.task
+async def save_memory(memory: AgentState) -> flyte.io.File:
+    path = write_to_disk(memory)
+    return await flyte.io.File.from_local(path)
+```
+
+<!--
+Show example handling dataclasses, pydantic models, dataframes, files, directories, etc.
+Show a mermaid diagram showing how state persistence works between tasks
+-->
 
 ---
 layout: default
@@ -291,8 +339,8 @@ layout: default
 
 1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
 1. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
-1. **Make failures cheap** — global cache, run-level replay log, and state persistence
-1. **Infrastructure-level context** — agents see and fix OOM/network; request more resources
+1. **Make failures cheap** — global caching, run-level replay log, and state persistence
+1. **Infrastructure as context** — agents see and fix OOM/network; request more resources
 1. **Agent self-service utilities** — secure tool building and orchestration
 1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
 
@@ -367,7 +415,7 @@ layout: two-cols-header
 ::left::
 
 - **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
-- **Global cache** — reuse completed steps; no redoing work after a crash
+- **Global caching** — reuse completed steps; no redoing work after a crash
 - **Automatic state persistence** — retrieved context survives retries; no losing semantic grounding
 
 **Bonus:** Failed runs become *training data* or *additional context* for the agent to learn from.
@@ -395,9 +443,9 @@ layout: two-cols-header
 
 ::left::
 
-Give the agent **system-level observability** in context:
+Give the agent **infra-level context**:
 
-- *"This tool is loading 32Gi but the container has 16Gi"*
+- *"This tool OOM'd at 16Gi of memory, maybe I can (a) load less data or (b) request for more memory"*
 - Agent can re-write the tool for less memory, or **request a bigger container**
 
 Agents that write ML code can **dynamically adjust** tool resource requests as they scale.
@@ -483,7 +531,7 @@ layout: two-cols-header
 When self-service isn't enough:
 
 - **Human-in-the-loop gates** — ultimate fallback for course correction or missing context
-- **Platform-native debugger** — when the agent can't handle an exception, fail the run but **fully reproduce** the error with a live debugger
+- **Platform-native debugging** — when the agent can't handle an exception, fail the run but **fully reproduce** the error with a live debugger
 
 ::right::
 
@@ -523,7 +571,7 @@ layout: two-cols-header
 3. **Realizes it needs more memory** — infrastructure as context
 4. **Provisions more resources** and completes
 
-**Evaluation loop:** Production traces → evals; often **80% of "failures"** are network timeouts or infra, not prompt issues.
+**Evaluation loop:** Production traces become a data source for evals, or additional context for agents in the future.
 
 ::right::
 
@@ -563,7 +611,7 @@ layout: two-cols-header
 
 ::left::
 
-**🤔 Challenge:** Automated solutions architect; living knowledge graph of 250K+ software products. ~190 steps and ~95 LLM calls per product
+**🤔 Challenge:** Automated solutions architect - build a living knowledge graph of 250K+ software products. ~190 steps and ~95 LLM calls per product
 
 **✅ Solution:** Tiered task environments on Flyte 2. Cross-run caching (convergence detection), checkpoint-based recovery, full auditability.
 
