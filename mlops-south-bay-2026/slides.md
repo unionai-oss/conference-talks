@@ -58,7 +58,7 @@ MLOps South Bay 2026
 layout: center
 ---
 
-# The hidden infrastructure problem
+# The agent infrastructure problem
 
 You built an agent, optimized its prompts, engineered its context, implemented an eval harness, and it works beautifully in development…
 
@@ -139,7 +139,7 @@ typically focus on recovering from semantic failures: *"I need more context abou
 Agents often don't directly reason about:
 
 - Surviving a network timeout
-- Recovering from OOM errors
+- Recovering from system-level errors
 - Recalling state across retries
 
 </v-clicks>
@@ -163,13 +163,17 @@ If a failure **wipes the agent's state**, that hard-earned context is worthless.
 
 ### Durability: what even is it?
 
-<br>
+<v-clicks>
+
+It's about making the following very easy:
+
+</v-clicks>
 
 <v-clicks>
 
-- 📋 Replay log
-- 🎒 Global caching
-- 💾 Automatic state persistence
+- 📋 **Run-level replay log**: immediately resume an agent roll-out where it left off
+- 🎒 **Global caching**: don't re-execute shareable compute/io-bound workloads
+- 💾 **Intermediate state persistence**: save and restore intermediate state between tasks
 
 </v-clicks>
 
@@ -204,6 +208,7 @@ flowchart LR
   P --> T2
   P --> T3
 
+  style P fill:#9370DB,stroke:#6A0DAD,color:#fff
   style T1 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
   style T2 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
   style T3 fill:#FFB6C1,stroke:#DC143C,stroke-width:2px,color:#8B0000
@@ -250,6 +255,7 @@ flowchart LR
   P --> T2
   P --> T3
 
+  style P fill:#9370DB,stroke:#6A0DAD,color:#fff
   style T1 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d
   style T2 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d
   style T3 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
@@ -280,56 +286,145 @@ layout: two-cols-header
 
 # Global Caching
 
-Avoid re-executing work whose outcome can be **shared across all agent runs** — same task + same inputs → reuse cached result.
+Avoid re-executing workloads where the output can be **shared across all agent runs**.
 
 ::left::
 
+
+Control which tools/subagents are cached and which are not.
+
+```python
+@env.task(cache="auto")
+async def web_search_tool(url: str) -> str:
+    ...
+
+@env.task(cache="auto")
+async def db_read_tool(query: str) -> str:
+    ...
+
+@env.task(cache="disable")
+async def composer_subagent(content: str) -> None:
+    ...
+```
+
+::right::
+
+```mermaid {scale: 0.75}
+flowchart TB
+
+  subgraph I1["Invocation 1"]
+    direction TB
+    W1[Web Search ✅]
+    D1[DB Read ✅]
+    G1[Compose report]
+    W1 --- D1 --- G1
+
+    style W1 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d
+    style D1 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d    
+    style G1 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
+  end
+
+  subgraph I2["Invocation 2"]
+    direction TB
+    W2[Web Search 👀]
+    D2[DB Read 👀]
+    G2[Compose report]
+    W2 --- D2 --- G2
+
+    style W2 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d
+    style D2 fill:#90EE90,stroke:#228B22,stroke-width:2px,color:#0d5c0d
+    style G2 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
+  end
+
+  A[🤖 Agent] --write a report about LLMs--> I1
+  A --write a report about LLMs--> I2
+  style A fill:#9370DB,stroke:#6A0DAD,color:#fff
+```
+
+
+
+<!--
 - Cache key: inputs + task name + interface hash + (optional) version
 - `behavior="auto"`: cache version from source-code hash; invalidates when code changes
 - `behavior="override"`: pin a version for stable cache across deploys
 - Project/domain isolation so dev/staging/prod caches don’t collide
-
-::right::
-
-```python
-@env.task(cache="auto")
-async def fetch_embeddings(text: str) -> list[float]:
-    # Shared across all runs with same input — no re-run
-    return await embed(text)
-```
-
-<!--
-Example should show cache task decorator and consuming driver task calling it multiple times
-show a mermaid diagram showing how caching works
--->
+ -->
 
 ---
 layout: two-cols-header
 ---
 
-# Automatic state persistence
+# Intermediate state persistence
 
-**Abstract away** serializing and deserializing state (memory, data) to object store. Pass references or materialized structs between tasks; Flyte handles upload/download and format.
+**Abstract away** serializing and deserializing state (memory, data) to object store.
 
 ::left::
 
+<!--
 - **Materialized**: dataclasses, Pydantic — full content serialized between tasks
 - **Offloaded**: `File`, `Dir`, `DataFrame` — stored in blob store; tasks get references, data fetched on use
 - Same types work as inputs/outputs; no manual `pickle` or bucket plumbing for agent state
+-->
+
+
+```python {all|5,14|8,16|5,14|13,18}
+class AgentState(BaseModel):
+    messages: list[Message]
+
+@env.task
+async def llm(state: AgentState) -> AgentState: ...
+
+@env.task
+async def tool(state: AgentState) -> AgentState: ...
+
+@env.task
+async def agent() -> str:
+    state = AgentState()
+    while not await done(state):
+        message = await llm(state)
+        if is_tool_call(state):
+            message = await tool(state)
+        state.messages.append(message)
+    return await compose_final_answer(state)
+```
 
 ::right::
 
-```python
-@env.task
-async def save_memory(memory: AgentState) -> flyte.io.File:
-    path = write_to_disk(memory)
-    return await flyte.io.File.from_local(path)
+
+<div class="flex justify-center items-center h-full">
+
+```mermaid {scale: 0.5}
+flowchart TB
+  subgraph agent["Agent Process"]
+    direction TB
+    C1[LLM call 1]
+    T1[Tool call]
+    C2[LLM call 2]
+
+    C1 --> T1 --> C2
+  end
+
+  subgraph O["Object Store"]
+    direction TB
+    S1[State S']
+    S2[State S'']
+  end
+
+  C1 --> S1
+  S1 --> T1
+  T1 --> S2
+  S2 --> C2
+  C2 --> Output
+
+  style C1 fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style T1 fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style C2 fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style S1 fill:#FDB51F,stroke:#E5A31B,color:#000
+  style S2 fill:#FDB51F,stroke:#E5A31B,color:#000
+  style Output fill:#FDB51F,stroke:#E5A31B,color:#000
 ```
 
-<!--
-Show example handling dataclasses, pydantic models, dataframes, files, directories, etc.
-Show a mermaid diagram showing how state persistence works between tasks
--->
+</div>
 
 ---
 layout: default
@@ -354,24 +449,47 @@ Or, any other general purpose programming language really.
 
 ::left::
 
-Loops, fan-out, conditionals, and **try/except** are trivial. No DSL surprises.
+🔁 Loops, fan-out, conditionals, and *try/except* are trivial. No DSL surprises.
 
-Provide **functional hooks** to trace and checkpoint intermediate state — then get
+<v-click at="2">
+
+⭐️ Exceptions are a perfect delivery mechanism for critical context about failures
+at all layers of the stack.
+
+</v-click>
+
+<v-click at="3">
+
+🪝 Provide **functional hooks** to trace and checkpoint intermediate state — then get
 out of the AI engineer's way.
+
+</v-click>
 
 ::right::
 
-```python
-# src/agent_demo.py (condensed)
-@env.task
-async def main(simulate_oom: bool = False) -> str:
-    data = await fetch_data()
-    return await process_step(
-        data, simulate_oom=simulate_oom
-    )
-```
+```python {all|11-19|16-19|5,8}{at:1}
+import flyte
 
-<!-- example: should show for loop, if/else, try/except statement with realistic-looking agent code -->
+env = flyte.TaskEnvironment("agent", image=flyte.Image.from_debian_base())
+
+@flyte.trace
+async def tool(x: int, y: int) -> AgentState: ...
+
+@env.task(retries=RetryStrategy(5))
+async def agent() -> str:
+    state = AgentState()
+    while not await done(state):
+        message = await llm(state)
+        if is_tool_call(state):
+            try:
+                message = await tool(parse_tool_call(state))
+            except ToolArgsError as exc:
+                message = await llm(
+                    state, prompt=f"Fix the tool args: {str(exc)}"
+                )
+        state.messages.append(message)
+    return await compose_final_answer(state)
+```
 
 ---
 layout: two-cols-header
@@ -379,28 +497,56 @@ layout: two-cols-header
 
 # Durability & observability hooks
 
+Make it really easy to trace, checkpoint, and persist intermediate state.
+
 ::left::
 
-- **Continuous eval:** pipe production traces into your eval framework; catch regressions early
-- **Prompt debugging:** see which prompt variant led to which behavior at which step
+<v-click at="1">
+
+`TaskEnvironment`: infrastructure-level configuration: container image, resources, etc.
+
+</v-click>
+
+<v-click at="2">
+
+`@env.task`: containerized functions that auto-persist intermediate state
+
+</v-click>
+
+<v-click at="3">
+
+`@flyte.trace`: helper functions inside a task that are tracked by the replay log
+
+</v-click>
+
+<!-- **Continuous eval:** pipe production traces into your eval framework; catch regressions early
+
+**Prompt debugging:** see which prompt variant led to which behavior at which step -->
 
 ::right::
 
-```python
-# src/agent_demo.py (condensed)
-@env.task
-async def fetch_data() -> flyte.io.File:
-    ...
+```python {all|3-7|9-10,15-21|12-13}{at:1}
+import flyte
 
-@env.task
-async def process_step(
-    data: flyte.io.File, simulate_oom: bool = False
-) -> str:
-    if simulate_oom:
-        raise MemoryError(
-            "Simulated OOM: container needs more memory"
-        )
-    ...
+image = flyte.Image.from_debian_base().with_pip_packages(["pandas"])
+agent_env = flyte.TaskEnvironment("agent", image=image)
+train_model_env = flyte.TaskEnvironment(
+    "train_model", image=image, resources=flyte.Resources(cpu=4, memory="4Gi")
+)
+
+@train_model_env.task
+async def train_model_tool(code: str, data: flyte.io.DataFrame) -> AgentState: ...
+
+@flyte.trace
+async def llm(url: str) -> str: ...
+
+@agent_env.task
+async def agent(prompt: str, data: flyte.io.DataFrame) -> str:
+    code = await llm(
+        data,
+        prompt="Write a Python script to train a model on the data"
+    )
+    return await train_model_tool(code, data)
 ```
 
 <!-- the example should show tasks and traces -->
@@ -416,7 +562,7 @@ layout: two-cols-header
 
 - **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
 - **Global caching** — reuse completed steps; no redoing work after a crash
-- **Automatic state persistence** — retrieved context survives retries; no losing semantic grounding
+- **Intermediate state persistence** — retrieved context survives retries; no losing semantic grounding
 
 **Bonus:** Failed runs become *training data* or *additional context* for the agent to learn from.
 
@@ -678,7 +824,7 @@ class: text-center
 
 - Observability is necessary but not sufficient: a durability layer helps agents recover quickly.
 - Don't aim for failure-proof — aim for **cheap failures**, **fast recovery**, and **eval feedback**
-- Ask yourself: *"If this crashes at 2 AM, can it recover without me? Will I have the data to improve it?"*
+- Try/except is critical: errors are the most natural way to deliver critical context to the agent.
 
 **Help your agents help themselves.**
 
