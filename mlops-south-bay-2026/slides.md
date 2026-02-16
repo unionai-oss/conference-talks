@@ -11,7 +11,7 @@ transition: none
 fonts:
   sans: 'DM Sans'
   serif: 'DM Sans'
-  mono: 'JetBrains Mono'
+  mono: 'Yellix'
 themeConfig:
   primary: '#FDB51F'
 ---
@@ -64,11 +64,15 @@ You built an agent, optimized its prompts, engineered its context, implemented a
 
 ... then the infrastructure got in the way
 
-- ❌ Tools making API calls are rate-limited.
-- ⚠️ Parallelized subagents/tool calls leads to resource contention.
+<v-clicks>
+
+- ❌ Tools making API calls or querying databases are rate-limited.
+- ⚠️ Parallelized subagents/tool calls leads to resource contention and degraded performance.
 - 💥 Containers run out of memory, are killed by the scheduler, are preempted by other jobs.
 - 🗑️ Agent memory loss or corruption, wiping out precious context.
-- 🔓 Agent components (MCP, coding subagents) encourage poor security hygiene.
+- 🔓 Agent components (MCPs, coder subagents) are easy to configure insecurely.
+
+</v-clicks>
 
 ---
 layout: center
@@ -76,10 +80,12 @@ layout: center
 
 # Agents Fail at Multiple Layers of the Orchestration Stack
 
-The semantic and networking layers of the stack get a lot of attention, but the infrastructure layer is just as critical.
+<!-- The semantic and networking layers of the stack get a lot of attention, but the infrastructure layer is just as critical. -->
 
-The problem isn't that agents fail. It's that recovering from failure is expensive and time-consuming because agents
-have no way of observing what's going on at the infrastructure layer and safely getting themselves back on track.
+The problem isn't that agents fail.
+
+It's that recovering from failure is virtually impossible without the full context of how the infrastructure, networking, logical, and semantic layers interact so that the agent can figure out
+how to recover from it.
 
 ---
 layout: center
@@ -89,35 +95,35 @@ layout: center
 
 ![Help yourself](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExcm0xbXh1NmE0eWtyZzBlNWlhbm1iaWo4cG03YWNrbTQ2djB2YzFlaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uRb2p09vY8lEs/giphy.gif)
 
----
-layout: default
----
-
-# Thesis: Five Design Elements for Production Agents
-
-1. **Plain Python (or TS/JS)** — minimize DSLs; loops, fan-out, try/except stay trivial
-2. **Make failures cheap** — global cache, run-level replay, memory persistence
-3. **Infrastructure-level context** — let agents see OOM/network errors and request more resources
-4. **Agent self-service tools** — secure tool building and orchestration
-5. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
-6. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
+Agents can recover from infra-level failures, but only if we give<br>them the right context.
 
 ---
 layout: default
 ---
 
-# Chapter 1: Where Agents Break — and Where Evals Miss
+# Design Principles for Self-Healing Agents
 
-**Failure modes at each layer:**
+1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
+1. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
+1. **Make failures cheap** — global cache, run-level replay log, and state persistence
+1. **Infrastructure-level context** — agents see and fix OOM/network; request more resources
+1. **Agent self-service utilities** — secure tool building and orchestration
+1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
 
-| **Layer** | **Example failure** |
+---
+layout: default
+---
+
+# Chapter 1: Where Agents Break
+
+| **🧱 Layer** | **❌ Example failures** |
 |-----------|---------------------|
-| Infrastructure | OOM, container killed or preempted |
-| Network | API rate-limiting, network timeouts |
+| Infrastructure | OOM, container killed or preempted, image pull backoff |
+| Network | API rate-limiting, network timeouts, ephemeral service outage |
 | Logical | Programming bugs, data validation errors |
-| Semantic | Hallucinated tool calls, logical errors |
+| Semantic | Hallucinations, incorrect tool calls, context utilization errors |
 | Tool execution | Bad arguments, tool timeouts, tool errors |
-| Memory | State wiped or corrupted on crash, context loss |
+| Memory | State wiped or corrupted on crash, context erasure |
 
 ---
 layout: default
@@ -125,7 +131,7 @@ layout: default
 
 # The Context and Evaluation Gap
 
-Your evals test **semantic correctness**: *"Does it answer right?"*
+Your evals test **semantic correctness**: *"Does it answer correctly?"*
 
 They often **miss**:
 
@@ -133,20 +139,48 @@ They often **miss**:
 - Does it recover from OOM?
 - Does it preserve state across retries?
 
-**Insight:** Agents can recover from *semantic* failures (prompts, context, control flow)
-— but only if **infrastructure doesn't kill them first** 💥.
+<v-clicks>
+
+**💡 Insight:** Agents can recover from errors at all the layers in the agent stack,
+even infrastructure-level failures, but only with the right context and tools ✅.
+
+</v-clicks>
+
+---
+layout: default
+---
+
+# Context engineering is also an infra problem
+
+If a failure **wipes the agent's state**, that hard-earned context is worthless.
+
+<br>
+
+### Durability: what even is it?
+
+<br>
+
+<v-clicks>
+
+- 📋 Replay log
+- 🎒 Global caching
+- 💾 Automatic state persistence
+
+</v-clicks>
+
 
 ---
 layout: two-cols-header
 ---
 
-# Context Engineering as a Layer
+# Replay log
 
-If a crash **wipes the agent's state**, that context is worthless.
+A service that records the state of an agent and its subtasks (tools, subagents, etc.)
+at each step.
 
-**Durability** (cache + replay + persistence) is what makes context engineering pay off in production.
+Avoids task re-execution, prevents memory/context loss, and even recovers from crashes
+in the root agent process.
 
-<br>
 
 ::left::
 
@@ -154,12 +188,12 @@ If a crash **wipes the agent's state**, that context is worthless.
 
 <br>
 
-```mermaid
+```mermaid {scale: 0.75}
 flowchart LR
   P["<strong>🤖 Agent</strong>"]
-  T1["<strong>🔧 Tool 1 ✅</strong>"]
-  T2["<strong>🤖 Subagent 1 ✅</strong>"]
-  T3["<strong>🪚 Tool 2 ❌</strong>"]
+  T1["<strong>🔧 Tool 1 ✅<br>Completed</strong>"]
+  T2["<strong>🤖 Subagent 1 ✅<br>Completed</strong>"]
+  T3["<strong>🪚 Tool 2 ❌<br>Failed</strong>"]
 
   P --> T1
   P --> T2
@@ -182,23 +216,17 @@ flowchart LR
 | 2                | 🤖 Subagent 1              | ✅         |
 | 3                | 🪚 Tool 2                  | ❌         |
 
-<style>
-.two-cols-header {
-  column-gap: 30px; /* Adjust the gap size as needed */
-}
-</style>
-
 ---
 layout: two-cols-header
 ---
 
-# Context Engineering as a Layer
+# Replay log
 
-If a crash **wipes the agent's state**, that context is worthless.
+A service that records the state of an agent and its subtasks (tools, subagents, etc.)
+at each step.
 
-**Durability** (cache + replay + persistence) is what makes context engineering pay off in production.
-
-<br>
+Avoids task re-execution, prevents memory/context loss, and even recovers from crashes
+in the root agent process.
 
 ::left::
 
@@ -206,12 +234,12 @@ If a crash **wipes the agent's state**, that context is worthless.
 
 <br>
 
-```mermaid
+```mermaid {scale: 0.75}
 flowchart LR
   P["<strong>🤖 Agent</strong>"]
-  T1["<strong>🔧 Tool 1 ✅</strong>"]
-  T2["<strong>🤖 Subagent 1 ✅</strong>"]
-  T3["<strong>🪚 Tool 2 ▶️</strong>"]
+  T1["<strong>🔧 Tool 1 ✅<br>Already done</strong>"]
+  T2["<strong>🤖 Subagent 1 ✅<br>Already done</strong>"]
+  T3["<strong>🪚 Tool 2 ▶⏳<br>In progress</strong>"]
 
   P --> T1
   P --> T2
@@ -232,7 +260,7 @@ flowchart LR
 |------------------|---------------------------|------------|
 | 1                | 🔧 Tool 1                  | ✅         |
 | 2                | 🤖 Subagent 1              | ✅         |
-| 3                | 🪚 Tool 2                  | ▶️         |
+| 3                | 🪚 Tool 2                  | ⏳         |
 
 <style>
 .two-cols-header {
@@ -240,30 +268,48 @@ flowchart LR
 }
 </style>
 
+
+---
+layout: two-cols-header
+---
+
+# Global Caching
+
+
+---
+layout: two-cols-header
+---
+
+# Automatic state persistence
+
+
 ---
 layout: default
 ---
 
 # Chapter 2: Six Design Principles for Self-Healing Agents
 
-1. **Plain Python/TS/JS** — DSLs add fragility; standard control flow makes debugging trivial
-2. **Make crashes cheap** — cache + replay log + memory persistence
-3. **Observability hooks** — `@flyte.trace`, `@env.task`
-4. **Infrastructure-level context** — agents see and fix OOM/network; request more resources
-5. **Agent self-service tools** — secure tool building and orchestration
-6. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
+1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
+1. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
+1. **Make failures cheap** — global cache, run-level replay log, and state persistence
+1. **Infrastructure-level context** — agents see and fix OOM/network; request more resources
+1. **Agent self-service utilities** — secure tool building and orchestration
+1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
 
 ---
 layout: two-cols-header
 ---
 
-# Why Plain Python?
+# Plain Python/TS/JS
+
+Or, any other general purpose programming language really.
 
 ::left::
 
 Loops, fan-out, conditionals, and **try/except** are trivial. No DSL surprises.
 
-Provide **functional hooks** to trace and checkpoint — then get out of the AI engineer's way.
+Provide **functional hooks** to trace and checkpoint intermediate state — then get
+out of the AI engineer's way.
 
 ::right::
 
@@ -277,37 +323,13 @@ async def main(simulate_oom: bool = False) -> str:
     )
 ```
 
----
-layout: two-cols-header
----
-
-# Make Crashes Cheap: Cache + Replay + Persistence
-
-::left::
-
-- **Global cache** — reuse completed steps; no redoing work after a crash
-- **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
-- **Memory persistence** — retrieved context survives retries; no losing semantic grounding
-
-**Bonus:** Failed runs become **training data** for prompt and context iteration (e.g. context graph).
-
-::right::
-
-```python
-# src/cacheable_step.py (condensed)
-@env.task
-async def fetch_data(source: str) -> flyte.io.File:
-    f = flyte.io.File.new_remote()
-    with open(f.path, "w") as out:
-        out.write(f"context from {source}")
-    return f
-```
+<!-- example: should show for loop, if/else, try/except statement with realistic-looking agent code -->
 
 ---
 layout: two-cols-header
 ---
 
-# Observability Hooks: Framework-Agnostic
+# Durability & observability hooks
 
 ::left::
 
@@ -333,11 +355,43 @@ async def process_step(
     ...
 ```
 
+<!-- the example should show tasks and traces -->
+<!-- show a screenshot or gif of the Union UI -->
+
 ---
 layout: two-cols-header
 ---
 
-# Infrastructure as Context
+# Make failures cheap
+
+::left::
+
+- **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
+- **Global cache** — reuse completed steps; no redoing work after a crash
+- **Automatic state persistence** — retrieved context survives retries; no losing semantic grounding
+
+**Bonus:** Failed runs become *training data* or *additional context* for the agent to learn from.
+
+::right::
+
+```python
+# src/cacheable_step.py (condensed)
+@env.task
+async def fetch_data(source: str) -> flyte.io.File:
+    f = flyte.io.File.new_remote()
+    with open(f.path, "w") as out:
+        out.write(f"context from {source}")
+    return f
+```
+
+<!-- Example should show cache in task decorator, file object creation, and task retry config -->
+<!-- Add mermaid cart diagram of how each component aids in recovery -->
+
+---
+layout: two-cols-header
+---
+
+# Infrastructure as context
 
 ::left::
 
@@ -373,18 +427,22 @@ async def main(payload: str, use_high: bool = False) -> str:
         return await process_high(payload)
 ```
 
+<!--
+example should show catching infra-level errors, parsing the error message, and
+agent reacting to it
+-->
+
 ---
 layout: two-cols-header
 ---
 
-# Agent Self-Service Tools
+# Agent self-service utilities
 
 ::left::
 
 - **Catch and respond to exceptions:** no magic, just write Python to handle exceptions and retry logic
 - **Code sandbox:** agents build their own tools safely; optional human review before registration
 - **Orchestration sandbox:** compose tools into workflows; catch semantic, logical, network, and system errors and decide what to do next
-- **Meta-agent:** agent that can fix bugs in the agent code itself
 
 ::right::
 
@@ -411,6 +469,8 @@ code_pipeline = flyte.sandboxed.code_to_task(
     ...
 )
 ```
+
+<!-- example of container task sandbox, orchestration sandbox (code mode) -->
 
 ---
 layout: two-cols-header
@@ -445,6 +505,8 @@ async def main() -> int:
     y = await event.wait.aio()
     return await task2(x, y)
 ```
+
+<!-- add a more realistic example of human-in-the-loop being ultimate fallback (after a few try-excepts -->
 
 ---
 layout: two-cols-header
@@ -488,6 +550,8 @@ async def main(simulate_oom: bool = False) -> str:
         data, simulate_oom=simulate_oom
     )
 ```
+
+<!-- add a gif of run the shows all the elements of the demo -->
 
 ---
 layout: two-cols-header
@@ -549,16 +613,22 @@ flowchart TD
   D --> C --> R --> T
 ```
 
+<style>
+.two-cols-header {
+  column-gap: 30px; /* Adjust the gap size as needed */
+}
+</style>
+
 ---
 layout: center
 class: text-center
 ---
 
-# Call to Action
+# Conclusion
 
 **Tomorrow, do your agents a favor:**
 
-- Build an **observability layer**: Flyte, W&B Weave, Arize Phoenix, LangSmith, MLFlow, etc.
+- Observability is necessary but not sufficient: a durability layer helps agents recover quickly.
 - Don't aim for failure-proof — aim for **cheap failures**, **fast recovery**, and **eval feedback**
 - Ask yourself: *"If this crashes at 2 AM, can it recover without me? Will I have the data to improve it?"*
 
