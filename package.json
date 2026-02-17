@@ -11,7 +11,8 @@
     "export:sample": "slidev export sample-talk/slides.md",
     "dev:mlops": "slidev mlops-south-bay-2026/slides.md --open",
     "build:mlops": "slidev build mlops-south-bay-2026/slides.md",
-    "export:mlops": "slidev export mlops-south-bay-2026/slides.md"
+    "export:mlops": "slidev export mlops-south-bay-2026/slides.md",
+    "build:all": "slidev build **/slides.md"
   },
   "devDependencies": {
     "@slidev/cli": "^52.0.0"
