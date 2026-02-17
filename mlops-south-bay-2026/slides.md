@@ -107,7 +107,7 @@ layout: default
 1. **Durability & observability hooks** — `@env.task`, `@flyte.trace` works with any framework/stack
 1. **Make failures cheap** — global caching, run-level replay log, and state persistence
 1. **Infrastructure as context** — agents see and fix OOM/network errors; request more resources
-1. **Agent self-service utilities** — secure tool building and orchestration
+1. **Agent self-healing utilities** — secure tool building and orchestration
 1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
 
 ---
@@ -684,23 +684,41 @@ agent reacting to it
 layout: two-cols-header
 ---
 
-# Agent self-healing utilities
+# Agent self-healing utilities: code sandbox
 
-Multi-level (infra-semantic) context + sandboxes = self-healing agents
+Multi-level context (from infra to semantic) + sandboxes = self-healing agents
 
 ::left::
+
+<v-click at="1">
 
 **Code sandbox runtime:** agents build their own tools safely in an isolated,
 secure container.
 
-MLE agent can write their own tools to train a model on given data.
+</v-click>
+
+<v-click at="2">
+
+MLE agent can write their own tools to train a model given some data.
+
+</v-click>
+
+<v-click at="3">
+
+Sandbox runs the code securely in a container.
+
+</v-click>
+
+<v-click at="4">
 
 In the case of an error, the agent re-writes the code with unit tests and tries
 again.
 
+</v-click>
+
 ::right::
 
-```python
+```python {all|1-3|7|10-15|16-20}{at:1}
 from flyte.extras import Sandbox
 
 sandbox = Sandbox(packages=["pandas", "numpy"])
@@ -729,24 +747,34 @@ async def mle_agent(data: DataFrame, max_iter: int) -> File:
 layout: two-cols-header
 ---
 
-# Agent self-healing utilities
+# Agent self-healing utilities: orchestration sandbox
 
-Multi-level (infra-semantic) context + sandboxes = self-healing agents
+Multi-level context (from infra to semantic) + sandboxes = self-healing agents
 
 ::left::
 
-**Orchestration sandbox:** "code-mode" agents compose trusted tools into
-workflows safely.
+<v-click at="1">
 
-Create a sandbox for agent-generated orchestration code to run in.
+Agents write pipeline code to orchestrate trusted tools.
 
-Can still dispatch tool calls to other tasks.
+</v-click>
+
+<v-click at="2">
+
+Orchestration "code-mode" sandbox runs agent-generated pipeline, which
+dispatches tool calls to the external tasks.
+
+</v-click>
+
+<v-click at="3">
 
 Tight error-iteration loop to fix orchestration code bugs.
 
+</v-click>
+
 ::right::
 
-```python
+```python {all|1-5,11-12|13|14-21}{at:1}
 @tool_env.task
 async def process_data(data: DataFrame) -> File: ...
 
@@ -778,21 +806,30 @@ layout: two-cols-header
 
 ::left::
 
-**Human-in-the-loop gates**: when self-service isn't enough, this is the ultimate fallback for course correction or providing missing context
+**Human-in-the-loop gates**: when agents can't recover by themselves, this is the ultimate fallback for course correction or providing missing context.
 
-When `max_iter` is exhausted, get more context from a human and recursively call
-the agent with the additional context.
+<v-click at="1">
+
+When `max_iter` is exhausted, get more context from a human (or external system)
+
+</v-click>
+
+<v-click at="2">
+
+Recursively call the agent with the additional context.
+
+</v-click>
 
 ::right::
 
-```python
+```python {all|17-22|23}{at:1}
 import flyteplugins.hitl as hitl
 
 agent_env = flyte.TaskEnvironment(..., depends_on=[hitl.env])
 
 @agent_env(retries=3)
 async def mle_agent(
-    data: DataFrame, max_iter: int, addl_ctx: str | None = None
+    data: DataFrame, max_iter: int, ctx: str | None = None
 ) -> File:
     ...
     for _ in range(max_iter):
@@ -803,37 +840,54 @@ async def mle_agent(
             ...
 
     event = await hitl.new_event.aio(
-        "more_context_event",
+        "get_more_context",
         data_type=str,
         prompt="Model training failed, please provide more context.",
     )
     more_context = await event.wait.aio()
-    mle_agent(data, max_iter, addl_ctx=more_context)
+    mle_agent(data, max_iter, ctx=more_context)
 ```
 
 <!-- add a more realistic example of human-in-the-loop being ultimate fallback (after a few try-excepts -->
 
 ---
-layout: two-cols-header
+layout: center
 ---
 
 # Chapter 3: What This Looks Like in Practice
 
 **Dragonfly case study** — [How Dragonfly scales agentic research across 250k products](https://www.union.ai/case-study/how-dragonfly-scales-agentic-research-across-250k-products)
 
+**🤔 Challenge:** Build an automated solutions architect - an agent that creates and a living knowledge graph of SaaS products.
+
+- `250K+` software products.
+- `~200` steps per agent call
+- `~100` LLM calls per product
+
+---
+layout: two-cols-header
+---
+
+# Scaling deep research agents
+
+**✅ Solution:** Tiered task environments on Flyte 2.
+
 ::left::
 
-**🤔 Challenge:** Automated solutions architect - build a living knowledge graph of 250K+ software products. ~190 steps and ~95 LLM calls per product
+<v-clicks>
 
-**✅ Solution:** Tiered task environments on Flyte 2. Cross-run caching (convergence detection), checkpoint-based recovery, full auditability.
+- **Cross-run caching**: pay for LLM API calls once.
+- **Semantic convergence detection**: coordinator consolidates overlapping research streams.
+- **Checkpoint-based recovery**: spot instance interruptions become a non-issue.
+- **Full auditability**: every agent decision and tool call is traced.
 
-**🚀 Results:** 1 hour from local prototype to production-grade remote workflows. 2,000 concurrent workflows; 50% ⬇️ failure recovery time, 30% ⬆️ development velocity; 12 hrs/wk saved on infra.
+</v-clicks>
 
 ::right::
 
-```mermaid {scale: 0.47}
+```mermaid {scale: 0.55}
 flowchart TD
-  subgraph D["<strong>🛞 Driver</strong> (4 replicas)"]
+  subgraph D["<strong>🛞 Agent Driver</strong> (4 replicas)"]
     direction LR
     D1["R1"]
     D2["R2"]
@@ -878,6 +932,19 @@ flowchart TD
   column-gap: 30px; /* Adjust the gap size as needed */
 }
 </style>
+
+---
+layout: default
+---
+
+# Scaling deep research agents
+
+**🚀 Results:** 1 hour from local prototype to production-grade remote workflows.
+
+- 2,000+ concurrent research runs
+- 50% ⬇️ failure recovery time
+- 30% ⬆️ development velocity
+- 12 hours/week saved on infrastructure.
 
 ---
 layout: center
