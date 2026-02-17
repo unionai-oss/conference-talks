@@ -2,4 +2,4 @@ hero:
   title: "Union Conference Talks"
   description: "Presentations by Union.ai"
 
-baseUrl: "/presentations"
+baseUrl: "/"
