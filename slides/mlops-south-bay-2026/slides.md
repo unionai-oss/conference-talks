@@ -14,6 +14,7 @@ fonts:
   mono: 'Yellix'
 themeConfig:
   primary: '#FDB51F'
+routerMode: hash
 ---
 
 <style>
