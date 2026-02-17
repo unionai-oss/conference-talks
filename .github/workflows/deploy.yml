@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -23,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: 24
 
       - name: Setup @antfu/ni
         run: npm i -g @antfu/ni
@@ -31,13 +32,15 @@ jobs:
       - name: Install dependencies
         run: nci
 
-      - name: Build MLOps South Bay 2026 slides
-        run: nr build:all --base /${{github.event.repository.name}}/
+      - name: Prepare deploy folder
+        run: rm -rf dist && mkdir dist
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+      - name: Build all slides and preview app as index
+        run: |
+          pnpm build
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
