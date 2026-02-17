@@ -1,5 +1,5 @@
 {
-  "name": "mlops-south-bay-2026",
+  "name": "sample-talk",
   "type": "module",
   "private": true,
   "scripts": {
@@ -10,7 +10,6 @@
   "dependencies": {
     "@slidev/cli": "^52.12.0",
     "@slidev/theme-default": "latest",
-    "@slidev/theme-seriph": "latest",
-    "vue": "^3.5.27"
+    "@slidev/theme-seriph": "latest"
   }
 }

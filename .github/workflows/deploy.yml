@@ -24,20 +24,93 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
-
-      - name: Setup @antfu/ni
-        run: npm i -g @antfu/ni
-
-      - name: Install dependencies
-        run: nci
+          node-version: 20
 
       - name: Prepare deploy folder
         run: rm -rf dist && mkdir dist
 
-      - name: Build all slides and preview app as index
+      - name: Build mlops-south-bay-2026
         run: |
-          pnpm build
+          cd slides/mlops-south-bay-2026
+          npm install
+          npx slidev build --base /conference-talks/mlops-south-bay-2026/ --out ../../dist/mlops-south-bay-2026
+
+      - name: Build sample-talk
+        run: |
+          cd slides/sample-talk
+          npm install
+          npx slidev build --base /conference-talks/sample-talk/ --out ../../dist/sample-talk
+
+      - name: Create index page
+        run: |
+          cat > dist/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Union Conference Talks</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 2rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                box-sizing: border-box;
+              }
+              .container {
+                background: white;
+                border-radius: 12px;
+                padding: 2rem;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+              }
+              h1 {
+                color: #333;
+                margin-bottom: 0.5rem;
+              }
+              p.subtitle {
+                color: #666;
+                margin-top: 0;
+                margin-bottom: 2rem;
+              }
+              ul {
+                list-style: none;
+                padding: 0;
+              }
+              li {
+                margin: 1rem 0;
+              }
+              a {
+                display: block;
+                padding: 1rem 1.5rem;
+                background: #f8f9fa;
+                border-radius: 8px;
+                color: #667eea;
+                text-decoration: none;
+                font-weight: 500;
+                transition: all 0.2s ease;
+              }
+              a:hover {
+                background: #667eea;
+                color: white;
+                transform: translateX(5px);
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Union Conference Talks</h1>
+              <p class="subtitle">Presentations by Union.ai</p>
+              <ul>
+                <li><a href="mlops-south-bay-2026/">MLOps South Bay 2026</a></li>
+                <li><a href="sample-talk/">Sample Talk</a></li>
+              </ul>
+            </div>
+          </body>
+          </html>
+          EOF
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
