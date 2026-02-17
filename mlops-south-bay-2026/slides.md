@@ -410,10 +410,10 @@ flowchart TB
     S2[State S'']
   end
 
-  C1 --> S1
-  S1 --> T1
-  T1 --> S2
-  S2 --> C2
+  C1 -.-> S1
+  S1 -.-> T1
+  T1 -.-> S2
+  S2 -.-> C2
   C2 --> Output
 
   style C1 fill:#9370DB,stroke:#6A0DAD,color:#fff
@@ -525,32 +525,27 @@ Make it really easy to trace, checkpoint, and persist intermediate state.
 
 ::right::
 
-```python {all|3-7|9-10,15-21|12-13}{at:1}
+```python {all|4-8|13-14,16-22|10-12}{at:1}
 import flyte
+from flyte.io import File, DataFrame
 
 image = flyte.Image.from_debian_base().with_pip_packages(["pandas"])
 agent_env = flyte.TaskEnvironment("agent", image=image)
-train_model_env = flyte.TaskEnvironment(
-    "train_model", image=image, resources=flyte.Resources(cpu=4, memory="4Gi")
+tool_env = flyte.TaskEnvironment(
+    "tools", image=image, resources=flyte.Resources(cpu=4, memory="4Gi")
 )
 
-@train_model_env.task
-async def train_model_tool(code: str, data: flyte.io.DataFrame) -> AgentState: ...
-
 @flyte.trace
-async def llm(url: str) -> str: ...
+async def write_code(prompt: str) -> str: ...
+
+@tool_env.task
+async def run_code(code: str, data: DataFrame) -> File: ...
 
 @agent_env.task
-async def agent(prompt: str, data: flyte.io.DataFrame) -> str:
-    code = await llm(
-        data,
-        prompt="Write a Python script to train a model on the data"
-    )
-    return await train_model_tool(code, data)
+async def mle_agent(data: DataFrame) -> File:
+    code = await write_code("Write a Python script to train a model on the data")
+    return await run_code(code, data)
 ```
-
-<!-- the example should show tasks and traces -->
-<!-- show a screenshot or gif of the Union UI -->
 
 ---
 layout: two-cols-header
@@ -558,25 +553,72 @@ layout: two-cols-header
 
 # Make failures cheap
 
+Failures are inevitable, but they don't have to be expensive.
+
 ::left::
 
-- **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
+<!-- - **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
 - **Global caching** — reuse completed steps; no redoing work after a crash
-- **Intermediate state persistence** — retrieved context survives retries; no losing semantic grounding
+- **Intermediate state persistence** — retrieved context survives retries; no losing semantic grounding -->
 
-**Bonus:** Failed runs become *training data* or *additional context* for the agent to learn from.
+
+```python {all|1-2,12|4-5,13|7-8,14}
+@flyte.trace
+async def write_code(prompt: str) -> str: ...
+
+@tool_env.task(cache="auto")
+async def run_code(code: str, data: DataFrame) -> File: ...
+
+@flyte.trace
+async def finalize_answer(code: str, model: File) -> str: ...
+
+@agent_env.task(retries=3)
+async def mle_agent(prompt: str, data: DataFrame) -> tuple[str, File]:
+    code = await write_code("Write a Python script to train a model...")
+    model = await run_code(code, data)
+    return await finalize_answer(code, model)
+```
+
+⭐️ Failed runs become *training data* or *additional context* for the agent to learn from.
+
 
 ::right::
 
-```python
-# src/cacheable_step.py (condensed)
-@env.task
-async def fetch_data(source: str) -> flyte.io.File:
-    f = flyte.io.File.new_remote()
-    with open(f.path, "w") as out:
-        out.write(f"context from {source}")
-    return f
+<div class="flex justify-center items-center h-full">
+
+```mermaid {scale: 0.525}
+flowchart TB
+  subgraph Agent["Agent"]
+    direction TB
+    L[Write code<br>📋 Checkpointed]
+    T[Run code<br>🎒 Cached]
+    F[Finalize answer<br>📋 Checkpointed]
+    L --> T --> F
+  end
+
+  subgraph State["Object store"]
+    direction TB
+
+    S1[Code]
+    S2[Model]
+  end
+
+  L -.-> S1
+  S1 -.-> T
+  T -.-> S2
+  S2 -.-> F
+  F --> Out[Code, Model]
+
+  style L fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style T fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style F fill:#9370DB,stroke:#6A0DAD,color:#fff
+  style S1 fill:#FDB51F,stroke:#E5A31B,color:#000
+  style S2 fill:#FDB51F,stroke:#E5A31B,color:#000
+  style Out fill:#FDB51F,stroke:#E5A31B,color:#000
 ```
+
+</div>
+
 
 <!-- Example should show cache in task decorator, file object creation, and task retry config -->
 <!-- Add mermaid cart diagram of how each component aids in recovery -->
@@ -587,38 +629,50 @@ layout: two-cols-header
 
 # Infrastructure as context
 
+**Infra-level context** relating to errors can be delivered via exception handling.
+
 ::left::
 
-Give the agent **infra-level context**:
+<!-- - *"This tool OOM'd at 16Gi of memory, maybe I can (a) load less data or (b) request for more memory"*
+- Agent can re-write the tool for less memory, or **request a bigger container** -->
 
-- *"This tool OOM'd at 16Gi of memory, maybe I can (a) load less data or (b) request for more memory"*
-- Agent can re-write the tool for less memory, or **request a bigger container**
+<v-click at="1">
 
-Agents that write ML code can **dynamically adjust** tool resource requests as they scale.
+The Flyte SDK exposes system-level errors like `flyte.errors.OOMError` as exceptions.
+
+</v-click>
+
+<v-click at="2">
+
+Agents can catch and respond to system-/infra-level errors and adjust resource requests accordingly.
+
+</v-click>
+
+<v-click at="3">
+
+Adjustments are sent back to the platform imperatively until `max_iter` budget is exhausted.
+
+</v-click>
 
 ::right::
 
-```python
-# src/infrastructure_as_context.py (condensed)
-env_low = flyte.TaskEnvironment(
-    name="infra-context-low",
-    resources=flyte.Resources(cpu=1, memory="128Mi"),
+```python {all|12|13-14|5,7-10}{at:1}
+@agent_env.task(retries=3)
+async def mle_agent(data: DataFrame, max_iter: int) -> tuple[str, File]:
+    code = await write_code("Write a Python script to train a model...")
+    resources = {"memory": "128Mi", "cpu": 4}
+    for _ in range(max_iter):
+        try:
+            resources = flyte.Resources(**resources)
+            model = await run_code.override(resources=resources)(
+                code, data
+            )
+            break
+        except flyte.errors.OOMError as exc:
+            resources = await adjust_resources(
+                prompt=f"Encountered error {exc}, adjust the memory"
+            )
     ...
-)
-env_high = flyte.TaskEnvironment(
-    name="infra-context-high",
-    resources=flyte.Resources(cpu=1, memory="512Mi"),
-    ...
-)
-
-@main_env.task
-async def main(payload: str, use_high: bool = False) -> str:
-    if use_high:
-        return await process_high(payload)
-    try:
-        return await process_low(payload)
-    except MemoryError:
-        return await process_high(payload)
 ```
 
 <!--
@@ -630,38 +684,43 @@ agent reacting to it
 layout: two-cols-header
 ---
 
-# Agent self-service utilities
+# Agent self-healing utilities
+
+Multi-level (infra-semantic) context + sandboxes = self-healing agents
 
 ::left::
 
-- **Catch and respond to exceptions:** no magic, just write Python to handle exceptions and retry logic
-- **Code sandbox:** agents build their own tools safely; optional human review before registration
-- **Orchestration sandbox:** compose tools into workflows; catch semantic, logical, network, and system errors and decide what to do next
+**Code sandbox runtime:** agents build their own tools safely in an isolated,
+secure container.
+
+MLE agent can write their own tools to train a model on given data.
+
+In the case of an error, the agent re-writes the code with unit tests and tries
+again.
 
 ::right::
 
 ```python
-# Code sandbox: src/code_sandbox.py
-run_generated_code(script_content, a, b)
-# ContainerTask or subprocess fallback
+from flyte.extras import Sandbox
 
-# Orchestration sandbox: src/orchestration_sandbox.py
-@env.task
-def add(x: int, y: int) -> int: ...
+sandbox = Sandbox(packages=["pandas", "numpy"])
 
-@env.sandboxed_task
-def leaderboard(
-    player_ids: list[int],
-) -> dict[str, int]:
-    for pid in player_ids:
-        score = fetch_score(pid)
-        total = add(total, score)
-    return {"total": total, ...}
-
-code_pipeline = flyte.sandboxed.code_to_task(
-    "partial = add(x,y); result = multiply(partial, scale)",
-    ...
-)
+@agent_env.task(retries=3)
+async def mle_agent(data: DataFrame, max_iter: int) -> File:
+    code = await write_code("Write a Python script to train a model...")
+    for _ in range(max_iter):
+        try:
+            return await sandbox.run.aio(
+                code=code,
+                inputs={"data": DataFrame},
+                outputs={"model": File},
+                data=data,
+            )
+        except flyte.errors.RuntimeUserError as exc:
+            code, tests = await write_code_with_tests(
+                f"Re-write code with tests\n{code}\nbased on error: {exc}."
+            )
+            await sandbox.run_tests.aio(code, tests)
 ```
 
 <!-- example of container task sandbox, orchestration sandbox (code mode) -->
@@ -670,34 +729,86 @@ code_pipeline = flyte.sandboxed.code_to_task(
 layout: two-cols-header
 ---
 
-# Human-in-the-Loop and Debugging
+# Agent self-healing utilities
+
+Multi-level (infra-semantic) context + sandboxes = self-healing agents
 
 ::left::
 
-When self-service isn't enough:
+**Orchestration sandbox:** "code-mode" agents compose trusted tools into
+workflows safely.
 
-- **Human-in-the-loop gates** — ultimate fallback for course correction or missing context
-- **Platform-native debugging** — when the agent can't handle an exception, fail the run but **fully reproduce** the error with a live debugger
+Create a sandbox for agent-generated orchestration code to run in.
+
+Can still dispatch tool calls to other tasks.
+
+Tight error-iteration loop to fix orchestration code bugs.
 
 ::right::
 
 ```python
-# src/human_in_the_loop.py — PR 657 (flyteplugins-hitl)
-task_env = flyte.TaskEnvironment(
-    ..., depends_on=[hitl.env]
-)
+@tool_env.task
+async def process_data(data: DataFrame) -> File: ...
 
-@task_env.task
-async def main() -> int:
-    x = await task1()
+@tool_env.task
+async def train_model(data: DataFrame) -> File: ...
+
+...
+
+@agent_env(retries=3)
+async def mle_agent(data: DataFrame, max_iter: int) -> File:
+    tools = [process_data, train_model, ...]
+    code = await write_pipeline_code("Write a model training pipeline...", tools)
+    pipeline = flyte.sandboxed.code_to_task(code, functions=tools)
+    for _ in range(max_iter):
+        try:
+            best_model = await pipeline(data)
+        except flyte.errors.RuntimeUserError as exc:
+            code = await write_pipeline_code(
+                f"Re-write code\n{code}\nbased on error: {exc}."
+            )
+            pipeline = flyte.sandboxed.code_to_task(code, functions=tools)
+```
+
+---
+layout: two-cols-header
+---
+
+# Human-in-the-loop recourse 
+
+::left::
+
+**Human-in-the-loop gates**: when self-service isn't enough, this is the ultimate fallback for course correction or providing missing context
+
+When `max_iter` is exhausted, get more context from a human and recursively call
+the agent with the additional context.
+
+::right::
+
+```python
+import flyteplugins.hitl as hitl
+
+agent_env = flyte.TaskEnvironment(..., depends_on=[hitl.env])
+
+@agent_env(retries=3)
+async def mle_agent(
+    data: DataFrame, max_iter: int, addl_ctx: str | None = None
+) -> File:
+    ...
+    for _ in range(max_iter):
+        try:
+            return await pipeline(data)      
+        except flyte.errors.RuntimeUserError as exc:
+            # code re-write handling
+            ...
+
     event = await hitl.new_event.aio(
-        "integer_input_event",
-        data_type=int,
-        scope="run",
-        prompt="What should I add to x?",
+        "more_context_event",
+        data_type=str,
+        prompt="Model training failed, please provide more context.",
     )
-    y = await event.wait.aio()
-    return await task2(x, y)
+    more_context = await event.wait.aio()
+    mle_agent(data, max_iter, addl_ctx=more_context)
 ```
 
 <!-- add a more realistic example of human-in-the-loop being ultimate fallback (after a few try-excepts -->
@@ -707,51 +818,6 @@ layout: two-cols-header
 ---
 
 # Chapter 3: What This Looks Like in Practice
-
-::left::
-
-**Demo:** An agent that
-
-1. **Crashes** (e.g. OOM or timeout)
-2. **Resumes from cache** — no redoing completed work
-3. **Realizes it needs more memory** — infrastructure as context
-4. **Provisions more resources** and completes
-
-**Evaluation loop:** Production traces become a data source for evals, or additional context for agents in the future.
-
-::right::
-
-```python
-# src/agent_demo.py (condensed)
-@env.task
-async def fetch_data() -> flyte.io.File:
-    ...  # cacheable; reused on retry
-
-@env.task
-async def process_step(
-    data: flyte.io.File, simulate_oom: bool = False
-) -> str:
-    if simulate_oom:
-        raise MemoryError(
-            "Simulated OOM: container needs more memory"
-        )
-    ...
-
-@env.task
-async def main(simulate_oom: bool = False) -> str:
-    data = await fetch_data()
-    return await process_step(
-        data, simulate_oom=simulate_oom
-    )
-```
-
-<!-- add a gif of run the shows all the elements of the demo -->
-
----
-layout: two-cols-header
----
-
-# Lessons from the Field
 
 **Dragonfly case study** — [How Dragonfly scales agentic research across 250k products](https://www.union.ai/case-study/how-dragonfly-scales-agentic-research-across-250k-products)
 
@@ -822,9 +888,9 @@ class: text-center
 
 **Tomorrow, do your agents a favor:**
 
-- Observability is necessary but not sufficient: a durability layer helps agents recover quickly.
-- Don't aim for failure-proof — aim for **cheap failures**, **fast recovery**, and **eval feedback**
-- Try/except is critical: errors are the most natural way to deliver critical context to the agent.
+- **Observability is necessary but not sufficient**: a durability layer helps agents recover quickly.
+- **Don't aim for failure-proof**: aim for **cheap failures**, **fast recovery**, and **eval feedback**
+- **Try/except is critical**: errors are a natural delivery mechanism to give the agent critical context.
 
 **Help your agents help themselves.**
 
