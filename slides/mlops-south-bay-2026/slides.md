@@ -633,9 +633,6 @@ layout: two-cols-header
 
 ::left::
 
-<!-- - *"This tool OOM'd at 16Gi of memory, maybe I can (a) load less data or (b) request for more memory"*
-- Agent can re-write the tool for less memory, or **request a bigger container** -->
-
 <v-click at="1">
 
 The Flyte SDK exposes system-level errors like `flyte.errors.OOMError` as exceptions.
@@ -971,3 +968,12 @@ class: text-center
 **Learn more:** [Union.ai](https://union.ai) — come talk at the booth.
 
 Questions?
+
+
+<!--
+Notes
+- Swap order of code sandbox and orchestration sandbox
+- Split design principles 1-3, make 4-6 "new paradigm"
+- Justify why you need two sandboxes and human in the loop (security)
+- (HITL) Highlight "without XYZ, you can't do blah" (why is recursion hard with existing solutions)
+ -->
