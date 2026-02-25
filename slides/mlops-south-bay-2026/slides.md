@@ -678,6 +678,63 @@ example should show catching infra-level errors, parsing the error message, and
 agent reacting to it
 -->
 
+
+---
+layout: two-cols-header
+---
+
+# Agent self-healing utilities: orchestration sandbox
+
+Multi-level context (from infra to semantic) + sandboxes = self-healing agents
+
+::left::
+
+<v-click at="1">
+
+Agents write pipeline code to orchestrate trusted tools.
+
+</v-click>
+
+<v-click at="2">
+
+Orchestration "code-mode" sandbox runs agent-generated pipeline, which
+dispatches tool calls to the external tasks.
+
+</v-click>
+
+<v-click at="3">
+
+Tight error-iteration loop to fix orchestration code bugs.
+
+</v-click>
+
+::right::
+
+```python {all|3-7,10|11-14|15-22}{at:1}
+import flyte.sandbox
+
+@tool_env.task
+async def process_data(data: DataFrame) -> File: ...
+
+@tool_env.task
+async def train_model(data: DataFrame) -> File: ...
+
+@agent_env(retries=3)
+async def mle_agent(data: DataFrame, max_iter: int) -> File:
+    tools = [process_data, train_model, ...]
+    code = await write_pipeline_code("Write a model training pipeline...", tools)
+    pipeline = flyte.sandbox.orchestrator_from_str(
+        code, inputs={"data": DataFrame}, outputs={"model": File}, tasks=tools)
+    for _ in range(max_iter):
+        try:
+            best_model = await pipeline(data)
+        except flyte.errors.RuntimeUserError as exc:
+            code = await write_pipeline_code(
+                f"Re-write code\n{code}\nbased on error: {exc}.", tools)
+            pipeline = flyte.sandbox.orchestrator_from_str(
+              code, inputs={"data": DataFrame}, outputs={"model": File}, tasks=tools)
+```
+
 ---
 layout: two-cols-header
 ---
@@ -716,85 +773,28 @@ again.
 
 ::right::
 
-```python {all|1-3|7|10-15|16-20}{at:1}
-from flyte.extras import Sandbox
-
-sandbox = Sandbox(packages=["pandas", "numpy"])
+```python {all|7-13|5|14|15-18}{at:1}
+import flyte.sandbox
 
 @agent_env.task(retries=3)
 async def mle_agent(data: DataFrame, max_iter: int) -> File:
     code = await write_code("Write a Python script to train a model...")
     for _ in range(max_iter):
         try:
-            return await sandbox.run.aio(
+            code_sandbox = flyte.sandbox.create(
                 code=code,
                 inputs={"data": DataFrame},
                 outputs={"model": File},
                 data=data,
             )
+            return await code_sandbox.run.aio(data=data)
         except flyte.errors.RuntimeUserError as exc:
-            code, tests = await write_code_with_tests(
-                f"Re-write code with tests\n{code}\nbased on error: {exc}."
+            code, tests = await write_code(
+                f"Re-write code \n{code}\nbased on error: {exc}."
             )
-            await sandbox.run_tests.aio(code, tests)
 ```
 
 <!-- example of container task sandbox, orchestration sandbox (code mode) -->
-
----
-layout: two-cols-header
----
-
-# Agent self-healing utilities: orchestration sandbox
-
-Multi-level context (from infra to semantic) + sandboxes = self-healing agents
-
-::left::
-
-<v-click at="1">
-
-Agents write pipeline code to orchestrate trusted tools.
-
-</v-click>
-
-<v-click at="2">
-
-Orchestration "code-mode" sandbox runs agent-generated pipeline, which
-dispatches tool calls to the external tasks.
-
-</v-click>
-
-<v-click at="3">
-
-Tight error-iteration loop to fix orchestration code bugs.
-
-</v-click>
-
-::right::
-
-```python {all|1-5,11-12|13|14-21}{at:1}
-@tool_env.task
-async def process_data(data: DataFrame) -> File: ...
-
-@tool_env.task
-async def train_model(data: DataFrame) -> File: ...
-
-...
-
-@agent_env(retries=3)
-async def mle_agent(data: DataFrame, max_iter: int) -> File:
-    tools = [process_data, train_model, ...]
-    code = await write_pipeline_code("Write a model training pipeline...", tools)
-    pipeline = flyte.sandboxed.code_to_task(code, functions=tools)
-    for _ in range(max_iter):
-        try:
-            best_model = await pipeline(data)
-        except flyte.errors.RuntimeUserError as exc:
-            code = await write_pipeline_code(
-                f"Re-write code\n{code}\nbased on error: {exc}."
-            )
-            pipeline = flyte.sandboxed.code_to_task(code, functions=tools)
-```
 
 ---
 layout: two-cols-header
