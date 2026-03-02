@@ -15,6 +15,7 @@ fonts:
 themeConfig:
   primary: '#FDB51F'
 routerMode: hash
+mdc: true
 ---
 
 <style>
@@ -59,6 +60,28 @@ MLOps South Bay 2026
 layout: center
 ---
 
+<h1 style="text-align: center !important;">My agent adoption timeline</h1>
+
+```mermaid {scale: 0.55}
+timeline
+  2022<br>First contact: Started using AI chat interfaces (ChatGPT)
+  2023<br>Fine-tuning LLMs & tinkering: Started using fine-tuned LLMs for specific coding use cases (i.e. Flyte code)
+    : Building RAG pipelines to explore internal use cases (docs search, etc.).
+  2024<br>Learning and prototyping: Prototyped a few LangChain apps for learning and internal purposes
+    : Started using Cursor, with mostly tab-completion vibe-coding
+    : Started using Perplexity and Claude for non-coding tasks
+  2025<br>Flyte 2 - durable, infra-aware agent orchestration: Nodey - an internal agent for updating customer K8s node-pool configs
+    : Union-MCP - an MCP server for agents to interact with a Flyte cluster
+    : Customers in SaaS, Geospatial, Insurance, AV, Biotech, starting to build agents
+    : Started using Cursor, Claude Code to implement PRs end-to-end
+  2026<br>"the year of the agent": Productizing lessons learned up to this point to build durable, self-healing agents.
+    : Building DS, MLE, MLOps agents for production.
+```
+
+---
+layout: center
+---
+
 # The agent infrastructure problem
 
 You built an agent, optimized its prompts, engineered its context, implemented an eval harness, and it works beautifully in development…
@@ -67,11 +90,11 @@ You built an agent, optimized its prompts, engineered its context, implemented a
 
 <v-clicks>
 
-- ❌ Tools making API calls or querying databases are rate-limited.
-- ⚠️ Parallelized subagents/tool calls leads to resource contention and degraded performance.
-- 💥 Containers run out of memory, are killed by the scheduler, are preempted by other jobs.
-- 🗑️ Agent memory loss or corruption, wiping out precious context.
-- 🔓 Agent components (MCPs, coder subagents) are easy to configure insecurely.
+- ❌ Tools/agents querying proprietary data sources require least-privilege access.
+- 💥 Tools/agents that require variable compute resources fall over with single-node agent runtimes.
+- ⚠️ Parallelized subagent/tool calls leads to resource contention and degraded performance.
+- 😵 Containers go OOM, are killed by the scheduler, and spot instances are preempted by other jobs.
+- 🗑️ Infra failures lead to agent memory loss or corruption, wiping out precious context.
 
 </v-clicks>
 
@@ -86,7 +109,7 @@ layout: center
 The problem isn't that agents fail.
 
 It's that recovering from failure is challenging without the full context of how the infrastructure, networking,
-logical, and semantic layers interact so that the agent can figure out how to recover from it.
+logical, and semantic layers all work together so that the agent can figure out how to recover from it.
 
 ---
 layout: center
@@ -104,27 +127,33 @@ layout: default
 
 # Design Principles for Self-Healing Agents
 
-1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
-1. **Durability & observability hooks** — `@env.task`, `@flyte.trace` works with any framework/stack
+1. **Use plain Python/TS/JS/etc** — DSLs incur additional cognitive overhead (for both humans and agents)
+1. **Provide functional durability hooks** — flexibility when building with frameworks/from scratch
 1. **Make failures cheap** — global caching, run-level replay log, and state persistence
-1. **Infrastructure as context** — agents see and fix OOM/network errors; request more resources
-1. **Agent self-healing utilities** — secure tool building and orchestration
-1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
+1. **Unlock infrastructure as context** — agents see and fix OOM/network errors; request more resources
+1. **Equip agents with secure sandboxes** — agents safely iterate on the inner loop
+1. **Human-in-the-loop as ultimate recourse** — manual feedback when the agent can't help itself
 
 ---
 layout: default
 ---
 
-# Chapter 1: Where Agents Break
+# Where Agents Break
 
 | **🧱 Layer** | **❌ Example failures** |
 |-----------|---------------------|
-| Infrastructure | OOM, container killed or preempted, image pull backoff |
+| Infrastructure | OOM, container killed or preempted, module not found |
 | Network | API rate-limiting, network timeouts, ephemeral service outage |
 | Logical | Programming bugs, data validation errors |
 | Semantic | Hallucinations, incorrect tool calls, context utilization errors |
 | Tool execution | Bad arguments, tool timeouts, tool errors |
-| Memory | State wiped or corrupted on crash, context erasure |
+| Context | State wiped or corrupted on crash, context erasure, context bloat |
+
+<v-click>
+
+**🔥 Infrastructure failures**: there's a lot of pain here in production agents.
+
+</v-click>
 
 ---
 layout: default
@@ -137,7 +166,7 @@ typically focus on recovering from semantic failures: *"I need more context abou
 
 <v-clicks>
 
-Agents often don't directly reason about:
+Agents often don't directly handle or reason about:
 
 - Surviving a network timeout
 - Recovering from system-level errors
@@ -148,7 +177,7 @@ Agents often don't directly reason about:
 <v-clicks>
 
 **💡 Insight:** agents can recover from errors at all the layers of the agent stack,
-even infrastructure-level failures, but only with the right context and tools ✅.
+even infrastructure-level failures, but only with the right context and capabilities ✅.
 
 </v-clicks>
 
@@ -172,9 +201,9 @@ It's about making the following very easy:
 
 <v-clicks>
 
-- 📋 **Run-level replay log**: immediately resume an agent roll-out where it left off
-- 🎒 **Global caching**: don't re-execute shareable compute/io-bound workloads
-- 💾 **Intermediate state persistence**: save and restore intermediate state between tasks
+- 📋 Immediately resuming an agent roll-out where it left off: **run-level replay log**
+- 🎒 Not re-executing shareable compute/io-bound workloads: **global caching**
+- 💾 Saving and restoring state between tasks: **intermediate state persistence**
 
 </v-clicks>
 
@@ -373,10 +402,10 @@ class AgentState(BaseModel):
     messages: list[Message]
 
 @env.task
-async def llm(state: AgentState) -> AgentState: ...
+async def llm(state: AgentState) -> Message: ...
 
 @env.task
-async def tool(state: AgentState) -> AgentState: ...
+async def tool(state: AgentState) -> Message: ...
 
 @env.task
 async def agent() -> str:
@@ -407,8 +436,8 @@ flowchart TB
 
   subgraph O["Object Store"]
     direction TB
-    S1[State S']
-    S2[State S'']
+    S1[Message M']
+    S2[Message M'']
   end
 
   C1 -.-> S1
@@ -431,26 +460,30 @@ flowchart TB
 layout: default
 ---
 
-# Chapter 2: Six Design Principles for Self-Healing Agents
+# Six Design Principles for Self-Healing Agents
 
-1. **Plain Python/TS/JS** — DSLs incur additional cognitive overhead (for both humans and agents)
-1. **Durability & observability hooks** — `@flyte.trace`, `@env.task`; works with any framework/stack
+1. **Use plain Python/TS/JS/etc** — DSLs incur additional cognitive overhead (for both humans and agents)
+1. **Provide functional durability hooks** — flexibility when building with frameworks/from scratch
 1. **Make failures cheap** — global caching, run-level replay log, and state persistence
-1. **Infrastructure as context** — agents see and fix OOM/network; request more resources
-1. **Agent self-service utilities** — secure tool building and orchestration
-1. **Human-in-the-loop** — debugger and manual feedback when self-service isn't enough
+1. **Unlock infrastructure as context** — agents see and fix OOM/network; request more resources
+1. **Equip agents with secure sandboxes** — agents safely iterate on the inner loop
+1. **Human-in-the-loop as final recourse** — manual feedback when the agent can't help itself
 
 ---
 layout: two-cols-header
 ---
 
-# Plain Python/TS/JS
+# Use plain Python/TS/JS/etc
 
 Or, any other general purpose programming language really.
 
 ::left::
 
+<v-click at="1">
+
 🔁 Loops, fan-out, conditionals, and *try/except* are trivial. No DSL surprises.
+
+</v-click>
 
 <v-click at="2">
 
@@ -477,7 +510,7 @@ env = flyte.TaskEnvironment("agent", image=flyte.Image.from_debian_base())
 async def tool(x: int, y: int) -> AgentState: ...
 
 @env.task(retries=RetryStrategy(5))
-async def agent() -> str:
+async def mle_agent() -> str:
     state = AgentState()
     while not await done(state):
         message = await llm(state)
@@ -496,7 +529,7 @@ async def agent() -> str:
 layout: two-cols-header
 ---
 
-# Durability & observability hooks
+# Provide functional durability hooks
 
 Make it really easy to trace, checkpoint, and persist intermediate state.
 
@@ -580,7 +613,11 @@ async def mle_agent(prompt: str, data: DataFrame) -> tuple[str, File]:
     return await finalize_answer(code, model)
 ```
 
+<v-click>
+
 ⭐️ Failed runs become *training data* or *additional context* for the agent to learn from.
+
+</v-click>
 
 
 ::right::
@@ -628,7 +665,7 @@ flowchart TB
 layout: two-cols-header
 ---
 
-# Infrastructure as context
+# Unlock infrastructure as context
 
 **Infra-level context** relating to errors can be delivered via exception handling.
 
@@ -683,9 +720,9 @@ agent reacting to it
 layout: two-cols-header
 ---
 
-# Agent self-healing utilities: orchestration sandbox
+# Equip agents with secure sandboxes
 
-Multi-level context (from infra to semantic) + sandboxes = self-healing agents
+"Code mode" orchestration sandbox
 
 ::left::
 
@@ -698,7 +735,7 @@ Agents write pipeline code to orchestrate trusted tools.
 <v-click at="2">
 
 Orchestration "code-mode" sandbox runs agent-generated pipeline, which
-dispatches tool calls to the external tasks.
+dispatches tool calls to the trusted tasks.
 
 </v-click>
 
@@ -739,9 +776,9 @@ async def mle_agent(data: DataFrame, max_iter: int) -> File:
 layout: two-cols-header
 ---
 
-# Agent self-healing utilities: code sandbox
+# Equip agents with secure sandboxes
 
-Multi-level context (from infra to semantic) + sandboxes = self-healing agents
+Stateless code sandbox
 
 ::left::
 
@@ -800,7 +837,7 @@ async def mle_agent(data: DataFrame, max_iter: int) -> File:
 layout: two-cols-header
 ---
 
-# Human-in-the-loop recourse 
+# Human-in-the-loop as ultimate recourse
 
 ::left::
 
@@ -846,13 +883,41 @@ async def mle_agent(
     mle_agent(data, max_iter, ctx=more_context)
 ```
 
-<!-- add a more realistic example of human-in-the-loop being ultimate fallback (after a few try-excepts -->
+---
+layout: center
+---
+
+# The Outcome: Agents with a healing factor
+
+Agents can request for more memory and compute when a tool is memory/compute-bound.
+
+<img src="/static/mle-agent-1.png" alt="MLE agent workflow with sandbox retries" style="filter: brightness(1.35);">
 
 ---
 layout: center
 ---
 
-# Chapter 3: What This Looks Like in Practice
+# The Outcome: Agents with a healing factor
+
+Re-build container images with (allowlisted) third-party dependencies.
+
+<img src="/static/mle-agent-3.png" alt="MLE agent workflow with sandbox retries" style="filter: brightness(1.35);">
+
+---
+layout: center
+---
+
+# The Outcome: Agents with a healing factor
+
+Recover from logical, networking, semantic, and tool execution failures without starting from scratch.
+
+<img src="/static/mle-agent-2.png" alt="MLE agent workflow with sandbox retries" style="filter: brightness(1.35);">
+
+---
+layout: center
+---
+
+# What This Looks Like in Practice
 
 **Dragonfly case study** — [How Dragonfly scales agentic research across 250k products](https://www.union.ai/case-study/how-dragonfly-scales-agentic-research-across-250k-products)
 
@@ -861,6 +926,9 @@ layout: center
 - `250K+` software products.
 - `~200` steps per agent call
 - `~100` LLM calls per product
+
+<br>
+<img src="/static/qr-code-dragonfly.png" alt="Dragonfly agentic research workflow" style="max-width: 180px;">
 
 ---
 layout: two-cols-header
@@ -885,7 +953,7 @@ layout: two-cols-header
 
 ```mermaid {scale: 0.55}
 flowchart TD
-  subgraph D["<strong>🛞 Agent Driver</strong> (4 replicas)"]
+  subgraph D["<strong>🛞 Agent</strong> (4 replicas)"]
     direction LR
     D1["R1"]
     D2["R2"]
@@ -954,8 +1022,9 @@ class: text-center
 **Tomorrow, do your agents a favor:**
 
 - **Observability is necessary but not sufficient**: a durability layer helps agents recover quickly.
-- **Don't aim for failure-proof**: aim for **cheap failures**, **fast recovery**, and **eval feedback**
-- **Try/except is critical**: errors are a natural delivery mechanism to give the agent critical context.
+- **Don't aim for failure-proof**: aim for **cheap failures**, **fast recovery**, and **quick agent loop feedback**.
+- **Infrastructure as context**: agents can fix their own infra-level failures if they have the right context.
+- **Secure sandboxes to facilitate self-healing**: agents can safely iterate on the inner loop.
 
 **Help your agents help themselves.**
 
@@ -966,10 +1035,11 @@ class: text-center
 
 # Thank You
 
-**Learn more:** [Union.ai](https://union.ai) — come talk at the booth.
-
 Questions?
 
+Come talk to me and the team at the [Union.ai](https://union.ai) booth.
+
+<img src="/static/qr-code-union.png" alt="Union.ai booth" style="max-width: 180px;">
 
 <!--
 Notes
