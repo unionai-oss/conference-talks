@@ -1,10 +1,9 @@
 ---
 theme: seriph
-title: The Orchestration Stack for Observable, Debuggable, and Durable Agents
+title: Put resilient agents in production
 titleTemplate: '%s | MLOps South Bay 2026'
 info: |
-  ## The Orchestration Stack for Observable, Debuggable, and Durable Agents
-  Building agents that help themselves. Union.ai / Flyte.
+  ## Put resilient agents in production. Union.ai / Flyte.
 drawings:
   persist: false
 transition: none
@@ -48,36 +47,13 @@ h1, h2, h3, ul, li, p { text-align: left !important; }
 }
 </style>
 
-# The Orchestration Stack for Observable, Debuggable, and Durable Agents
+# Put resilient agents in production
 
 <br />
 
 ### Haytham Abuelfutuh @ Union.ai
 
-MLOps South Bay 2026
-
----
-layout: center
----
-
-<h1 style="text-align: center !important;">My agent adoption timeline</h1>
-
-```mermaid {scale: 0.55}
-timeline
-  2022<br>First contact: Started using AI chat interfaces (ChatGPT)
-  2023<br>Fine-tuning LLMs & tinkering: Started using fine-tuned LLMs for specific coding use cases (i.e. Flyte code)
-    : Building RAG pipelines to explore internal use cases (docs search, etc.).
-  2024<br>Learning and prototyping: Prototyped a few LangChain apps for learning and internal purposes
-    : Started using Cursor, with mostly tab-completion vibe-coding
-    : Started using Perplexity and Claude for non-coding tasks
-  2025<br>Flyte 2 - durable, infra-aware agent orchestration: Nodey - an internal agent for updating customer K8s node-pool configs
-    : Union-MCP - an MCP server for agents to interact with a Flyte cluster
-    : Customers in SaaS, Geospatial, Insurance, AV, Biotech, starting to build agents
-    : Started using Cursor, Claude Code to implement PRs end-to-end
-  2026<br>"the year of the agent": Shipping sandbox environments and code generation for production agents
-    : Customers running BI agents, deep research agents, and MLE agents on Union
-    : Union-MCP moving into core Flyte v2 SDK based on customer feedback
-```
+MLOps Seattle 2026
 
 ---
 layout: center
@@ -89,15 +65,11 @@ You optimized the prompts, engineered the context, wrote an eval harness, and it
 
 ... then you tried to run it in production.
 
-<v-clicks>
-
 - ❌ Your tools need to query proprietary data sources with least-privilege access
 - 💥 A tool call needs 32GB of RAM but your agent runtime is a single node
 - ⚠️ You fan out 20 subagent calls and they're all fighting for the same resources
 - 😵 Your container goes OOM, gets killed, and the spot instance vanishes
 - 🗑️ All that hard-earned context? Gone. The agent starts from scratch.
-
-</v-clicks>
 
 ---
 layout: center
@@ -114,16 +86,6 @@ Recovery requires context from **every layer** of the stack — infrastructure, 
 logical, and semantic — working together.
 
 ---
-layout: center
----
-
-# But here's the thing...
-
-![Help yourself](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExcm0xbXh1NmE0eWtyZzBlNWlhbm1iaWo4cG03YWNrbTQ2djB2YzFlaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/uRb2p09vY8lEs/giphy.gif)
-
-Agents **can** recover from infra-level failures. We just need to give<br>them the right context and capabilities.
-
----
 layout: default
 ---
 
@@ -131,60 +93,26 @@ layout: default
 
 | **🧱 Layer** | **❌ What goes wrong** |
 |-----------|---------------------|
+| Semantic | Hallucinations, incorrect tool calls, context utilization errors |
+| Logical | Programming bugs, data validation errors |
 | Infrastructure | OOM, container killed or preempted, module not found |
 | Network | API rate-limiting, network timeouts, ephemeral service outage |
-| Logical | Programming bugs, data validation errors |
-| Semantic | Hallucinations, incorrect tool calls, context utilization errors |
 | Tool execution | Bad arguments, tool timeouts, tool errors |
 | Context | State wiped or corrupted on crash, context erasure, context bloat |
-
-<v-click>
 
 Most eval harnesses test **semantic correctness**: *"Does it answer correctly?"*
 
 But nobody's evaluating: *"Can it survive getting OOM-killed on retry #3?"*
 
-</v-click>
-
 ---
 layout: default
 ---
 
-# Six design principles for self-healing agents
+# 3Ds design principles for resilient agents
 
-1. **Use plain Python/TS/JS/etc** — DSLs incur cognitive overhead for both humans and agents
-1. **Provide functional durability hooks** — flexibility whether you're using a framework or building from scratch
-1. **Make failures cheap** — global caching, run-level replay log, and state persistence
-1. **Unlock infrastructure as context** — agents see and fix OOM/network errors; request more resources
-1. **Equip agents with secure sandboxes** — agents safely iterate on the inner loop
-1. **Human-in-the-loop as ultimate recourse** — manual feedback when the agent can't help itself
-
----
-layout: default
----
-
-# Context engineering is also an infra problem
-
-If a failure **wipes the agent's state**, all that context engineering was for nothing.
-
-<br>
-
-### What does "durability" actually mean?
-
-<v-clicks>
-
-Three things:
-
-</v-clicks>
-
-<v-clicks>
-
-- 📋 Resume exactly where you left off after a crash: **run-level replay log**
-- 🎒 Don't redo work that's already been done: **global caching**
-- 💾 Persist state between tasks so retries don't lose context: **intermediate state persistence**
-
-</v-clicks>
-
+1. **Dynamic** - No DSL, provision infra/compute at will, 
+2. **Durable** - Snapshots, caching, replay-log, state persistence,
+3. **Defended** - Bounded executions (e.g. sandboxes, human in the loop)
 
 ---
 layout: two-cols-header

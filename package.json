@@ -11,10 +11,11 @@
     "export:sample": "slidev export sample-talk/slides.md",
     "dev:mlops": "slidev mlops-south-bay-2026/slides.md --open",
     "build:mlops": "slidev build mlops-south-bay-2026/slides.md",
-    "export:mlops": "slidev export mlops-south-bay-2026/slides.md"
+    "export:mlops": "slidev export mlops-south-bay-2026/slides.md",
+    "export:mlops-seattle": "slidev export slides/mlops-seattle-2026/slides.md --format pptx --dark"
   },
   "devDependencies": {
-    "@slidev/cli": "^52.0.0"
+    "@slidev/cli": "^52.14.1"
   },
   "dependencies": {
     "@slidev/theme-default": "^0.25.0",
