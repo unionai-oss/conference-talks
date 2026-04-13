@@ -1,7 +1,7 @@
 ---
 theme: seriph
 title: Put resilient agents in production
-titleTemplate: '%s | MLOps South Bay 2026'
+titleTemplate: '%s | MLOps Seattle 2026'
 info: |
   ## Put resilient agents in production. Union.ai / Flyte.
 drawings:
@@ -108,71 +108,85 @@ But nobody's evaluating: *"Can it survive getting OOM-killed on retry #3?"*
 layout: default
 ---
 
-# 3Ds design principles for resilient agents
+# 3 Design Principles for resilient agents
 
-1. **Dynamic** - No DSL, provision infra/compute at will, 
-2. **Durable** - Snapshots, caching, replay-log, state persistence,
-3. **Defended** - Bounded executions (e.g. sandboxes, human in the loop)
+<br>
+
+1. **Dynamic** — plain code, provision infra on the fly. Adapt to failures in real time.
+1. **Durable** — replay log, caching, state persistence. Survive failures without losing work.
+1. **Defended** — sandboxes, human-in-the-loop. Bounded execution so agents can't spiral.
 
 ---
 layout: two-cols-header
 ---
 
-# Replay log
+# Dynamic: Plain code that's infra-aware
 
-A service that records the state of an agent and its subtasks (tools, subagents, etc.)
-at each step.
-
-Avoids task re-execution, prevents memory/context loss, and even recovers from crashes
-in the root agent process.
-
+No DSL — loops, fan-out, try/except are trivial. Exceptions deliver critical context from every layer.
 
 ::left::
 
-#### ▶️ Normal Execution
+<v-click at="1">
 
-<br>
+`TaskEnvironment` configures infra per concern: container image, resources, etc.
 
-```mermaid {scale: 0.75}
-flowchart LR
-  P["<strong>🤖 Agent</strong>"]
-  T1["<strong>🔧 Tool 1 ✅<br>Completed</strong>"]
-  T2["<strong>🤖 Subagent 1 ✅<br>Completed</strong>"]
-  T3["<strong>🪚 Tool 2 ❌<br>Failed</strong>"]
+🔁 Loops, fan-out, conditionals, and *try/except* are trivial. No DSL surprises.
 
-  P --> T1
-  P --> T2
-  P --> T3
+</v-click>
 
-  style P fill:#9370DB,stroke:#6A0DAD,color:#fff
-  style T1 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
-  style T2 fill:#87CEEB,stroke:#1E90FF,stroke-width:2px,color:#00008B
-  style T3 fill:#FFB6C1,stroke:#DC143C,stroke-width:2px,color:#8B0000
-```
+<v-click at="2">
+
+🪝 Provide **functional hooks** to trace and checkpoint intermediate state — then get
+out of the AI engineer's way.
+
+</v-click>
+
+<v-click at="3">
+
+⭐️ Exceptions are a perfect delivery mechanism for critical context about failures
+at all layers of the stack.
+
+The Flyte SDK exposes system-level errors like `flyte.errors.OOMError` as exceptions.
+
+</v-click>
 
 ::right::
 
-#### 📋 Replay Log
+```python {all|4-7,14|10|15,20}{at:1}
+import flyte
+from flyte.io import File, DataFrame
 
-<br>
+image = flyte.Image.from_debian_base().with_pip_packages(["pandas"])
+agent_env = flyte.TaskEnvironment("agent", image=image)
+tool_env = flyte.TaskEnvironment(
+    "tools", image=image, resources=flyte.Resources(cpu=4, memory="4Gi")
+)
 
-| **Step**         | **Component**              | **Status** |
-|------------------|---------------------------|------------|
-| 1                | 🔧 Tool 1                  | ✅         |
-| 2                | 🤖 Subagent 1              | ✅         |
-| 3                | 🪚 Tool 2                  | ❌         |
+@agent_env.task(retries=3)
+async def mle_agent(data: DataFrame, max_iter: int) -> tuple[str, File]:
+    code = await write_code("Write a Python script to train a model...")
+    resources = {"memory": "128Mi", "cpu": 4}
+    for _ in range(max_iter):
+        try:
+            model = await run_code.override(
+                resources=flyte.Resources(**resources)
+            )(code, data)
+            break
+        except flyte.errors.OOMError as exc:
+            resources = await adjust_resources(
+                prompt=f"Encountered error {exc}, adjust the memory"
+            )
+    ...
+```
 
 ---
 layout: two-cols-header
 ---
 
-# Replay log
+# Durable: Replay log
 
-A service that records the state of an agent and its subtasks (tools, subagents, etc.)
-at each step.
-
-Avoids task re-execution, prevents memory/context loss, and even recovers from crashes
-in the root agent process.
+Automatically record the state of an agent and its subtasks at each step.
+This avoids re-execution, prevents context loss, and recovers from crashes.
 
 ::left::
 
@@ -211,21 +225,19 @@ flowchart LR
 
 <style>
 .two-cols-header {
-  column-gap: 30px; /* Adjust the gap size as needed */
+  column-gap: 30px;
 }
 </style>
-
 
 ---
 layout: two-cols-header
 ---
 
-# Global Caching
+# Durable: Caching & state persistence
 
-Avoid re-executing workloads where the output can be **shared across all agent runs**.
+Avoid redoing work. Persist state so retries don't lose context.
 
 ::left::
-
 
 Control which tools/subagents are cached and which are not.
 
@@ -242,6 +254,8 @@ async def db_read_tool(query: str) -> str:
 async def composer_subagent(content: str) -> None:
     ...
 ```
+
+State (messages, data) is **auto-serialized** to object store between tasks — no manual pickle or bucket plumbing.
 
 ::right::
 
@@ -277,232 +291,15 @@ flowchart TB
   style A fill:#9370DB,stroke:#6A0DAD,color:#fff
 ```
 
-
-
-<!--
-- Cache key: inputs + task name + interface hash + (optional) version
-- `behavior="auto"`: cache version from source-code hash; invalidates when code changes
-- `behavior="override"`: pin a version for stable cache across deploys
-- Project/domain isolation so dev/staging/prod caches don’t collide
- -->
-
 ---
 layout: two-cols-header
 ---
 
-# Intermediate state persistence
-
-**Abstract away** serializing and deserializing state (memory, data) to object store.
-
-::left::
-
-<!--
-- **Materialized**: dataclasses, Pydantic — full content serialized between tasks
-- **Offloaded**: `File`, `Dir`, `DataFrame` — stored in blob store; tasks get references, data fetched on use
-- Same types work as inputs/outputs; no manual `pickle` or bucket plumbing for agent state
--->
-
-
-```python {all|5,14|8,16|5,14|13,18}
-class AgentState(BaseModel):
-    messages: list[Message]
-
-@env.task
-async def llm(state: AgentState) -> Message: ...
-
-@env.task
-async def tool(state: AgentState) -> Message: ...
-
-@env.task
-async def agent() -> str:
-    state = AgentState()
-    while not await done(state):
-        message = await llm(state)
-        if is_tool_call(state):
-            message = await tool(state)
-        state.messages.append(message)
-    return await compose_final_answer(state)
-```
-
-::right::
-
-
-<div class="flex justify-center items-center h-full">
-
-```mermaid {scale: 0.5}
-flowchart TB
-  subgraph agent["Agent Process"]
-    direction TB
-    C1[LLM call 1]
-    T1[Tool call]
-    C2[LLM call 2]
-
-    C1 --> T1 --> C2
-  end
-
-  subgraph O["Object Store"]
-    direction TB
-    S1[Message M']
-    S2[Message M'']
-  end
-
-  C1 -.-> S1
-  S1 -.-> T1
-  T1 -.-> S2
-  S2 -.-> C2
-  C2 --> Output
-
-  style C1 fill:#9370DB,stroke:#6A0DAD,color:#fff
-  style T1 fill:#9370DB,stroke:#6A0DAD,color:#fff
-  style C2 fill:#9370DB,stroke:#6A0DAD,color:#fff
-  style S1 fill:#FDB51F,stroke:#E5A31B,color:#000
-  style S2 fill:#FDB51F,stroke:#E5A31B,color:#000
-  style Output fill:#FDB51F,stroke:#E5A31B,color:#000
-```
-
-</div>
-
----
-layout: default
----
-
-# OK so how do we actually build this?
-
-Let's walk through each principle with real code.
-
-1. **Plain Python** — no DSL surprises
-1. **Durability hooks** — trace, checkpoint, persist
-1. **Cheap failures** — caching + replay + state persistence
-1. **Infra as context** — agents see and fix OOM/network errors
-1. **Secure sandboxes** — agents safely iterate on code
-1. **Human-in-the-loop** — the ultimate fallback
-
----
-layout: two-cols-header
----
-
-# Use plain Python/TS/JS/etc
-
-Any general purpose programming language, really.
-
-::left::
-
-<v-click at="1">
-
-🔁 Loops, fan-out, conditionals, and *try/except* are trivial. No DSL surprises.
-
-</v-click>
-
-<v-click at="2">
-
-⭐️ Exceptions are a perfect delivery mechanism for critical context about failures
-at all layers of the stack.
-
-</v-click>
-
-<v-click at="3">
-
-🪝 Provide **functional hooks** to trace and checkpoint intermediate state — then get
-out of the AI engineer's way.
-
-</v-click>
-
-::right::
-
-```python {all|11-19|16-19|5,8}{at:1}
-import flyte
-
-env = flyte.TaskEnvironment("agent", image=flyte.Image.from_debian_base())
-
-@flyte.trace
-async def tool(x: int, y: int) -> AgentState: ...
-
-@env.task(retries=RetryStrategy(5))
-async def mle_agent() -> str:
-    state = AgentState()
-    while not await done(state):
-        message = await llm(state)
-        if is_tool_call(state):
-            try:
-                message = await tool(parse_tool_call(state))
-            except ToolArgsError as exc:
-                message = await llm(
-                    state, prompt=f"Fix the tool args: {str(exc)}"
-                )
-        state.messages.append(message)
-    return await compose_final_answer(state)
-```
-
----
-layout: two-cols-header
----
-
-# Provide functional durability hooks
-
-Make tracing, checkpointing, and persisting state trivially easy.
-
-::left::
-
-<v-click at="1">
-
-`TaskEnvironment`: infrastructure-level configuration: container image, resources, etc.
-
-</v-click>
-
-<v-click at="2">
-
-`@env.task`: containerized functions that auto-persist intermediate state
-
-</v-click>
-
-<v-click at="3">
-
-`@flyte.trace`: helper functions inside a task that are tracked by the replay log
-
-</v-click>
-
-<!-- **Continuous eval:** pipe production traces into your eval framework; catch regressions early
-
-**Prompt debugging:** see which prompt variant led to which behavior at which step -->
-
-::right::
-
-```python {all|4-8|13-14,16-22|10-12}{at:1}
-import flyte
-from flyte.io import File, DataFrame
-
-image = flyte.Image.from_debian_base().with_pip_packages(["pandas"])
-agent_env = flyte.TaskEnvironment("agent", image=image)
-tool_env = flyte.TaskEnvironment(
-    "tools", image=image, resources=flyte.Resources(cpu=4, memory="4Gi")
-)
-
-@flyte.trace
-async def write_code(prompt: str) -> str: ...
-
-@tool_env.task
-async def run_code(code: str, data: DataFrame) -> File: ...
-
-@agent_env.task
-async def mle_agent(data: DataFrame) -> File:
-    code = await write_code("Write a Python script to train a model on the data")
-    return await run_code(code, data)
-```
-
----
-layout: two-cols-header
----
-
-# Make failures cheap
+# Durable: Make failures cheap
 
 Your agent _will_ fail. The question is: how expensive is each failure?
 
 ::left::
-
-<!-- - **Run-level replay log** — full reproducibility; rehydrate state when things go wrong
-- **Global caching** — reuse completed steps; no redoing work after a crash
-- **Intermediate state persistence** — retrieved context survives retries; no losing semantic grounding -->
-
 
 ```python {all|1-2,12|4-5,13|7-8,14}
 @flyte.trace
@@ -526,7 +323,6 @@ async def mle_agent(prompt: str, data: DataFrame) -> tuple[str, File]:
 ⭐️ Failed runs become *training data* or *additional context* for the agent to learn from.
 
 </v-click>
-
 
 ::right::
 
@@ -565,160 +361,37 @@ flowchart TB
 
 </div>
 
-
-<!-- Example should show cache in task decorator, file object creation, and task retry config -->
-<!-- Add mermaid cart diagram of how each component aids in recovery -->
-
 ---
 layout: two-cols-header
 ---
 
-# Unlock infrastructure as context
+# Defended: Secure sandboxes
 
-This is where it gets interesting. What if your agent could _see_ infra errors and react?
+Agents write and execute code in isolated, secure containers — with a tight error-iteration loop.
 
 ::left::
 
 <v-click at="1">
 
-The Flyte SDK exposes system-level errors like `flyte.errors.OOMError` as exceptions.
+Agents build their own tools safely in a sandboxed container.
 
 </v-click>
 
 <v-click at="2">
 
-Agents can catch and respond to system-/infra-level errors and adjust resource requests accordingly.
+Sandbox runs agent-generated code securely — no network access, no host escape.
 
 </v-click>
 
 <v-click at="3">
 
-Adjustments are sent back to the platform imperatively until `max_iter` budget is exhausted.
+On error, the agent re-writes code and tries again without losing state.
 
 </v-click>
 
 ::right::
 
-```python {all|12|13-14|5,7-10}{at:1}
-@agent_env.task(retries=3)
-async def mle_agent(data: DataFrame, max_iter: int) -> tuple[str, File]:
-    code = await write_code("Write a Python script to train a model...")
-    resources = {"memory": "128Mi", "cpu": 4}
-    for _ in range(max_iter):
-        try:
-            resources = flyte.Resources(**resources)
-            model = await run_code.override(resources=resources)(
-                code, data
-            )
-            break
-        except flyte.errors.OOMError as exc:
-            resources = await adjust_resources(
-                prompt=f"Encountered error {exc}, adjust the memory"
-            )
-    ...
-```
-
-<!--
-example should show catching infra-level errors, parsing the error message, and
-agent reacting to it
--->
-
-
----
-layout: two-cols-header
----
-
-# Equip agents with secure sandboxes
-
-"Code mode" — agents write orchestration code, not just tool calls
-
-::left::
-
-<v-click at="1">
-
-Agents write pipeline code to orchestrate trusted tools.
-
-</v-click>
-
-<v-click at="2">
-
-Orchestration "code-mode" sandbox runs agent-generated pipeline, which
-dispatches tool calls to the trusted tasks.
-
-</v-click>
-
-<v-click at="3">
-
-Tight error-iteration loop to fix orchestration code bugs.
-
-</v-click>
-
-::right::
-
-```python {all|3-7,10|11-14|15-22}{at:1}
-import flyte.sandbox
-
-@tool_env.task
-async def process_data(data: DataFrame) -> File: ...
-
-@tool_env.task
-async def train_model(data: DataFrame) -> File: ...
-
-@agent_env(retries=3)
-async def mle_agent(data: DataFrame, max_iter: int) -> File:
-    tools = [process_data, train_model, ...]
-    code = await write_pipeline_code("Write a model training pipeline...", tools)
-    pipeline = flyte.sandbox.orchestrator_from_str(
-        code, inputs={"data": DataFrame}, outputs={"model": File}, tasks=tools)
-    for _ in range(max_iter):
-        try:
-            best_model = await pipeline(data)
-        except flyte.errors.RuntimeUserError as exc:
-            code = await write_pipeline_code(
-                f"Re-write code\n{code}\nbased on error: {exc}.", tools)
-            pipeline = flyte.sandbox.orchestrator_from_str(
-              code, inputs={"data": DataFrame}, outputs={"model": File}, tasks=tools)
-```
-
----
-layout: two-cols-header
----
-
-# Equip agents with secure sandboxes
-
-Stateless code sandbox — agents build their own tools
-
-::left::
-
-<v-click at="1">
-
-**Code sandbox runtime:** agents build their own tools safely in an isolated,
-secure container.
-
-</v-click>
-
-<v-click at="2">
-
-MLE agent can write their own tools to train a model given some data.
-
-</v-click>
-
-<v-click at="3">
-
-Sandbox runs the code securely in a container.
-
-</v-click>
-
-<v-click at="4">
-
-In the case of an error, the agent re-writes the code with unit tests and tries
-again.
-
-</v-click>
-
-::right::
-
-```python {all|7-13|5|14|15-18}{at:1}
+```python {all|7-13|14|15-18}{at:1}
 import flyte.sandbox
 
 @agent_env.task(retries=3)
@@ -739,13 +412,11 @@ async def mle_agent(data: DataFrame, max_iter: int) -> File:
             )
 ```
 
-<!-- example of container task sandbox, orchestration sandbox (code mode) -->
-
 ---
 layout: two-cols-header
 ---
 
-# Human-in-the-loop as ultimate recourse
+# Defended: Human-in-the-loop
 
 ::left::
 
@@ -807,44 +478,9 @@ layout: center
 
 # What this looks like in practice
 
-Agents that re-build container images with (allowlisted) third-party dependencies.
-
-<img src="/static/mle-agent-3.png" alt="MLE agent workflow with sandbox retries" style="filter: brightness(1.35);">
-
----
-layout: center
----
-
-# What this looks like in practice
-
 Agents that recover from logical, networking, semantic, and tool execution failures — without starting from scratch.
 
 <img src="/static/mle-agent-2.png" alt="MLE agent workflow with sandbox retries" style="filter: brightness(1.35);">
-
----
-layout: center
----
-
-# Real-world: a travel-tech BI agent
-
-A travel company built an agentic BI analyst that runs SQL queries, then processes results
-with LLM-generated Python code in a Flyte sandbox.
-
-<v-clicks>
-
-- Agent runs SQL against BigQuery, gets raw data
-- LLM writes Python/Polars code to transform the data
-- Code executes in a **sandboxed container** — isolated, no network access
-- Results come back as charts and tables in a chat interface
-- When the generated code fails, the agent **rewrites and retries** without losing state
-
-</v-clicks>
-
-<v-click>
-
-This is the sandbox principle in action — and they went from prototype to production in days, not weeks.
-
-</v-click>
 
 ---
 layout: center
@@ -873,14 +509,10 @@ Tiered task environments on Flyte 2.
 
 ::left::
 
-<v-clicks>
-
 - **Cross-run caching**: pay for LLM API calls once.
 - **Semantic convergence detection**: coordinator consolidates overlapping research streams.
 - **Checkpoint-based recovery**: spot instance interruptions become a non-issue.
 - **Full auditability**: every agent decision and tool call is traced.
-
-</v-clicks>
 
 ::right::
 
@@ -928,36 +560,22 @@ flowchart TD
 
 <style>
 .two-cols-header {
-  column-gap: 30px; /* Adjust the gap size as needed */
+  column-gap: 30px;
 }
 </style>
-
----
-layout: default
----
-
-# The results
-
-**🚀** 1 hour from local prototype to production-grade remote workflows.
-
-- 2,000+ concurrent research runs
-- 50% reduction in failure recovery time
-- 30% improvement in development velocity
-- 12 hours/week saved on infrastructure
 
 ---
 layout: center
 class: text-center
 ---
 
-# TL;DR — help your agents help themselves
+# TL;DR — remember the 3 Ds
 
 <v-clicks>
 
-- **Observability is necessary but not sufficient** — you need a durability layer too
-- **Don't aim for failure-proof** — aim for **cheap failures** and **fast recovery**
-- **Infrastructure is context** — agents can fix their own infra failures if they can see them
-- **Sandboxes unlock self-healing** — let agents iterate safely on the inner loop
+- **Dynamic** — plain code, infra as context. Agents can fix their own infra failures if they can see them.
+- **Durable** — replay log, caching, state persistence. Don't aim for failure-proof — aim for cheap failures and fast recovery.
+- **Defended** — sandboxes and human-in-the-loop. Let agents iterate safely, and escalate when stuck.
 
 </v-clicks>
 
