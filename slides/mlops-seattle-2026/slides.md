@@ -3,7 +3,7 @@ theme: seriph
 title: Put resilient agents in production
 titleTemplate: '%s | MLOps Seattle 2026'
 info: |
-  ## Put resilient agents in production. Union.ai / Flyte.
+  ## Put resilient agents in production with Union.ai / Flyte.
 drawings:
   persist: false
 transition: none
