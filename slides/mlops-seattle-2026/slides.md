@@ -1,6 +1,7 @@
 ---
 theme: seriph
 title: Put resilient agents in production
+author: Haytham Abuelfutuh @ Union.ai
 titleTemplate: '%s | MLOps Seattle 2026'
 info: |
   ## Put resilient agents in production with Union.ai / Flyte.

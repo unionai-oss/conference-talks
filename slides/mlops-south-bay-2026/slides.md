@@ -1,6 +1,7 @@
 ---
 theme: seriph
 title: The Orchestration Stack for Observable, Debuggable, and Durable Agents
+author: Niels Bantilan @ Union.ai
 titleTemplate: '%s | MLOps South Bay 2026'
 info: |
   ## The Orchestration Stack for Observable, Debuggable, and Durable Agents
