@@ -1,7 +1,7 @@
 ---
 theme: seriph
-title: Container-enabled Asyncio is All You Need
-author: Niels Bantilan
+title: PyCon US 2026 · Container-enabled Asyncio is All You Need
+author: Niels Bantilan @ Union.ai
 titleTemplate: '%s | PyCon US 2026'
 info: |
   ## PyCon US 2026 · ~25 min + ~5 min Q&A
@@ -14,23 +14,23 @@ info: |
 
 drawings:
   persist: false
-transition: slide-left
+transition: default
 fonts:
   sans: 'DM Sans'
   serif: 'DM Sans'
   mono: 'JetBrains Mono'
 themeConfig:
-  primary: '#306998'
+  primary: '#8C4FFF'
 routerMode: hash
 mdc: true
 ---
 
 <style>
-h1 { color: #306998 !important; }
+h1 { color: #8C4FFF !important; }
 h1, h2, h3, ul, li, p { text-align: left !important; }
-:global(h1), :global(h2), :global(h3) { color: #306998 !important; }
+:global(h1), :global(h2), :global(h3) { color: #8C4FFF !important; }
 :global(.slidev-layout.cover h1),
-:global(.slidev-layout.intro h1) { color: #306998 !important; }
+:global(.slidev-layout.intro h1) { color: #8C4FFF !important; }
 :global(.slidev-layout) {
   font-family: 'DM Sans', system-ui, sans-serif !important;
 }
@@ -45,31 +45,33 @@ h1, h2, h3, ul, li, p { text-align: left !important; }
 }
 </style>
 
-# Container-enabled Asyncio is All You Need
+<div style="text-align: center;">
 
-### (to build Pythonic AI workflows at scale)
+<h1 style="text-align: center !important;">Container-enabled Asyncio is All You Need</h1>
+
+<h3 style="text-align: center !important;">(to build Pythonic AI workflows at scale)</h3>
 
 <br />
 
-### Niels Bantilan · PyCon US 2026
+<h3 style="text-align: center !important;">Niels Bantilan · PyCon US 2026</h3>
 
-**30 min slot** · aim **~23–24 min** · **~5 min** audience questions
+<img src="https://us.pycon.org/2026/static/images/theme/logo.25d1b5ccb097.svg" alt="Pycon logo" width="180" style="margin-left: auto; margin-right: auto;" />
 
-<img src="https://www.python.org/static/img/python-logo.png" alt="Python logo" width="180" />
+</div>
 
 ---
 layout: center
 ---
 
-# You built an AI workflow…
+# You built an Agentic workflow…
 
-It calls **three LLM providers** in parallel, fans out **a hundred retrieval tasks**, runs **a few tools**, streams responses, and aggregates a final answer.
+It calls **three LLM providers** in parallel, fans out **a hundred retrieval tasks**, runs **ten tools** that make API calls, streams responses, and outputs a final answer.
 
 <v-clicks>
 
 - ✅ On your laptop with **10 inputs**: works beautifully.
 - 💥 In production with **10,000 inputs** and a real rate limit: it falls over.
-- 🌀 Connections pile up. One slow provider stalls the whole batch.
+- 🌀 Connections pile up. One slow connection stalls the whole batch.
 - 😵 An OOM in a tool call kills the entire process.
 - 🤷 You can't back-pressure inbound work without rewriting half of it.
 
@@ -79,19 +81,39 @@ It calls **three LLM providers** in parallel, fans out **a hundred retrieval tas
 layout: center
 ---
 
-# You built an ML workflow…
+# You built an ~~Agentic~~ ML workflow…
 
-It calls **three LLM providers** in parallel, fans out **a hundred retrieval tasks**, runs **a few tools**, streams responses, and aggregates a final answer.
+It ~~calls~~ trains **three** ~~**LLM providers**~~ **models** in parallel, fans out **a hundred** ~~**retrival**~~ **HPO sweep tasks**, runs **ten** ~~**tools**~~ **evals** that make API calls, streams ~~responses~~ logs and metrics, and outputs a ~~final answer~~ deployed model.
 
-<v-clicks>
+<v-click>
 
 - ✅ On your laptop with **10 inputs**: works beautifully.
 - 💥 In production with **10,000 inputs** and a real rate limit: it falls over.
-- 🌀 Connections pile up. One slow provider stalls the whole batch.
+- 🌀 Connections pile up. One slow connection stalls the whole batch.
 - 😵 An OOM in a tool call kills the entire process.
 - 🤷 You can't back-pressure inbound work without rewriting half of it.
 
-</v-clicks>
+</v-click>
+
+
+---
+layout: center
+---
+
+# You built an ~~Agentic~~ ETL workflow…
+
+It ~~calls~~ creates **three** ~~**LLM providers**~~ **datasets** in parallel, fans out **a hundred** ~~**retrival**~~ **processing tasks**, runs **ten** ~~**tools**~~ **quality check suites** that make API calls, streams ~~responses~~ validation metrics, and outputs a ~~final answer~~ deployed model.
+
+<v-click>
+
+- ✅ On your laptop with **10 inputs**: works beautifully.
+- 💥 In production with **10,000 inputs** and a real rate limit: it falls over.
+- 🌀 Connections pile up. One slow connection stalls the whole batch.
+- 😵 An OOM in a tool call kills the entire process.
+- 🤷 You can't back-pressure inbound work without rewriting half of it.
+
+</v-click>
+
 
 ---
 layout: center
@@ -115,7 +137,7 @@ layout: center
 
 # The reframe
 
-**Production AI workflows are graphs of waits using heterogeneous compute.**
+**Production AI workflows are graphs of waits where nodes are composed of potentially heterogenous compute units.**
 
 [`asyncio`](https://docs.python.org/3/library/asyncio.html) is the standard library's answer to graphs of waits.
 
@@ -127,10 +149,10 @@ In that pairing, your user code is **still just `async def`**.
 layout: default
 ---
 
-# Claim (narrow and technical)
+# Claims
 
-1. **`asyncio`** should be the **default tool** for overlapping I/O waits in Python — explicit tasks, cancellation, backpressure.
-2. When you need **strong isolation** (GPUs, tenancy, OOM boundaries), **`asyncio` stays in your process** while a **container orchestrator** schedules pods — you're still writing **`async def`** against APIs and queues.
+1. **`asyncio`** should be the **default tool** for overlapping I/O waits in Python — explicit tasks, cancellation, backpressure. In production, many Agentic, ML, and ETL workloads require concurrency and parallelism.
+2. When you need **strong isolation** (GPUs, tenancy, OOM boundaries), **`asyncio` stays in your process** while a **container orchestrator** schedules pods on the right compute — you're still writing **`async def`** against APIs and queues.
 
 Everything today builds **patterns** on those two ideas — including frameworks you might adopt later.
 
@@ -138,7 +160,7 @@ Everything today builds **patterns** on those two ideas — including frameworks
 layout: default
 ---
 
-# Roadmap
+# Outline
 
 | Block | Focus |
 |-------|-------|
@@ -154,7 +176,7 @@ Deeper citations & diagrams: [`context.md`](./context.md).
 layout: section
 ---
 
-# 1 · Production AI is a graph of waits
+# Production AI is a graph of waits
 
 ---
 layout: default
@@ -241,7 +263,7 @@ When you keep those two layers clean, **you don't need a third grammar in the mi
 layout: section
 ---
 
-# 2 · `asyncio` is the Python you already ship
+# `asyncio` is the Python you already ship
 
 ---
 layout: default
@@ -415,7 +437,7 @@ Reviewable Python. No new grammar.
 layout: section
 ---
 
-# 3 · Containers as the isolation boundary
+# Containers as the isolation boundary
 
 ---
 layout: default
@@ -614,4 +636,4 @@ layout: end
 
 # Thank you — questions?
 
-PyCon US 2026 · **~5 min** Q&A
+PyCon US 2026
