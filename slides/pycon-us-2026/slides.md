@@ -63,7 +63,7 @@ h1, h2, h3, ul, li, p { text-align: left !important; }
 layout: center
 ---
 
-# You built an Agentic workflow…
+# 🎉 Congrats! You built an Agentic workflow…
 
 It calls **three LLM providers** in parallel, fans out **a hundred retrieval tasks**, runs **ten tools** that make API calls, streams responses, and outputs a final answer.
 
@@ -123,7 +123,7 @@ layout: center
 
 A workflow DSL. A YAML DAG. A graph framework.
 
-> *"Real Python isn't enough for this — we need a real orchestrator."*
+> *"Python isn't enough to express this — we need an orchestrator with a specialized DSL."*
 
 <v-clicks>
 
@@ -141,9 +141,17 @@ layout: center
 
 [`asyncio`](https://docs.python.org/3/library/asyncio.html) is the standard library's answer to graphs of waits.
 
+<v-click>
+
 The places where it isn't enough — **GPUs**, **OOM containment**, **tenancy** — aren't problems you solve with a DSL either. You solve them with a **container orchestrator**.
 
-In that pairing, your user code is **still just `async def`**.
+</v-click>
+
+<v-click>
+
+In that pairing, your user code is **still just `async Python`**.
+
+</v-click>
 
 ---
 layout: default
@@ -151,10 +159,12 @@ layout: default
 
 # Claims
 
-1. **`asyncio`** should be the **default tool** for overlapping I/O waits in Python — explicit tasks, cancellation, backpressure. In production, many Agentic, ML, and ETL workloads require concurrency and parallelism.
-2. When you need **strong isolation** (GPUs, tenancy, OOM boundaries), **`asyncio` stays in your process** while a **container orchestrator** schedules pods on the right compute — you're still writing **`async def`** against APIs and queues.
+<v-clicks>
 
-Everything today builds **patterns** on those two ideas — including frameworks you might adopt later.
+1. **`asyncio`** should be one of the **main tools** you reach for when building production AI workflows, which require concurrency, parallelism, cancellation, backpressure, etc. Esp. with agents, DAGs are not enough.
+2. When you need **scale and strong isolation** (GPUs, tenancy, OOM boundaries), **`asyncio` stays in your toolkit** while a **container orchestrator** schedules containers on the right compute — you're still writing **`async Python`** against APIs and queues.
+
+</v-clicks>
 
 ---
 layout: default
@@ -162,15 +172,13 @@ layout: default
 
 # Outline
 
-| Block | Focus |
+| Part | Focus |
 |-------|-------|
 | **1** | **Production AI is a graph of waits** — three coordination stories, where DSLs creep in early |
-| **2** | **`asyncio` is the Python you already ship** — `TaskGroup`, `gather`, `Semaphore`, `Queue`, `timeout` |
+| **2** | **`async` Python has all the primitives you need** — `TaskGroup`, `gather`, `Semaphore`, `Queue`, `timeout`, `Condition` |
 | **3** | **Containers as the isolation boundary** — `asyncio` as **client** to a control plane |
-| **Practice** | **Case study** — how one open orchestrator wires the pattern in code you can read on GitHub |
+| **4** | **Case study** - an OSS reference implementation of these ideas |
 | **CTA** | What to do tomorrow |
-
-Deeper citations & diagrams: [`context.md`](./context.md).
 
 ---
 layout: section
@@ -186,11 +194,11 @@ layout: default
 
 They show up **together** — and they all spend their time **waiting**.
 
-**Data path & ETA** — warehouses, lakes, streams, feature sinks: throughput is **I/O fan-out** and **backpressure**, not "how fast is your `for` loop."
+**📊 ETL** — warehouses, lakes, streams, feature sinks: throughput is **I/O fan-out** and **backpressure**, not "how fast is your `for` loop."
 
-**Classical ML** — training, batch scoring, calibration, drift checks: **GPU RAM**, **queue depth**, and **fair sharing** decide whether jobs finish *this week* or blow the budget.
+**🔮 Classical ML** — training, batch scoring, calibration, drift checks: **GPU RAM**, **queue depth**, and **fair sharing** decide whether jobs finish *this week* or blow the budget.
 
-**Agentic workflows** — one session becomes **many** round-trips: retrieval, tools, provider APIs, human-in-the-loop hooks; latency is the **sum of overlapped (or serialized) waits**.
+**🤖 Agentic workflows** — one session becomes **many** round-trips: retrieval, tools, provider APIs, human-in-the-loop hooks; latency is the **sum of overlapped (or serialized) waits**.
 
 ---
 layout: default
@@ -285,7 +293,7 @@ layout: default
 
 # Cooperative scheduling (one thread per loop)
 
-```mermaid {theme: 'neutral'}
+```mermaid {theme: 'dark'}
 flowchart LR
   subgraph loop["Event loop"]
     A["Task"]
@@ -556,7 +564,7 @@ layout: default
 
 # Logical path (any orchestrator rhymes with this)
 
-```mermaid {theme: 'neutral'}
+```mermaid {theme: 'dark'}
 sequenceDiagram
   participant App as Your asyncio task
   participant Drv as In-process driver loop
@@ -596,14 +604,14 @@ layout: section
 layout: default
 ---
 
-# Tomorrow, before you reach for a framework…
+# Tomorrow, before you reach for a DAG tool…
 
 <v-clicks>
 
-- **Reach for `asyncio` first.** `TaskGroup`, `gather`, `Semaphore`, `Queue`, `timeout` cover most of what DSLs sell you. Code stays reviewable.
+- **Learn a little more about `asyncio`.** `TaskGroup`, `gather`, `Semaphore`, `Queue`, `timeout` cover most of what DSLs sell you. Code stays reviewable.
 - **Don't confuse "I need isolation" with "I need a DSL."** GPUs, OOM containment, multi-tenancy → that's a **container orchestrator**, not a new grammar. Your `async def` doesn't go away.
 - **Know your loop.** PEP 703 / free-threading is exciting and orthogonal. One primary event loop coordinating awaits is still the dominant shape.
-- **Read the controller code** of any orchestrator you adopt. If queues, limiters, and semaphores are visible, you can reason about it. If they aren't — that's a signal.
+- **Read the SDK controller code** of any orchestrator you adopt. If queues, limiters, and semaphores are visible, you can reason about it and hack it at the Python level. If they aren't, then you relinquish control over to the orchestrator backend.
 
 </v-clicks>
 
@@ -622,13 +630,12 @@ layout: center
 layout: default
 ---
 
-# Learn more (Python-first)
+# Learn more
 
 - [**`asyncio`**](https://docs.python.org/3/library/asyncio.html) · [**Tasks / TaskGroup**](https://docs.python.org/3/library/asyncio-task.html) · [**Queues**](https://docs.python.org/3/library/asyncio-queue.html)
 - [**PEP 703**](https://peps.python.org/pep-0703/) · [**Free-threading howto**](https://docs.python.org/3/howto/free-threading-python.html)
 - [Real Python — asyncio](https://realpython.com/async-io-python/) · [TaskGroup article](https://billypoon.com/insights/structured-concurrency-in-python-with-taskgroup-writing-async-code-that-doesn-t-break)
-
-**Case study repo (optional depth):** [`flyte-sdk`](https://github.com/flyteorg/flyte-sdk) · [`flyte` / protos](https://github.com/flyteorg/flyte) · speaker notes [`context.md`](./context.md)
+- **Case study repo:** [`flyte-sdk`](https://github.com/flyteorg/flyte-sdk) · [`flyte` / protos](https://github.com/flyteorg/flyte)
 
 ---
 layout: end
