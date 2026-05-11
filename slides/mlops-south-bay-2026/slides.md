@@ -1,11 +1,11 @@
 ---
 theme: seriph
-title: The Orchestration Stack for Observable, Debuggable, and Durable Agents
+title: MLOps South Bay 2026 · The Orchestration Stack for Observable, Debuggable, and Durable Agents
 author: Niels Bantilan @ Union.ai
 titleTemplate: '%s | MLOps South Bay 2026'
 info: |
-  ## The Orchestration Stack for Observable, Debuggable, and Durable Agents
-  Building agents that help themselves. Union.ai / Flyte.
+  ## MLOps South Bay 2026 · The Orchestration Stack for Observable, Debuggable, and Durable Agents
+  Building agents that help themselves with Union.ai / Flyte.
 drawings:
   persist: false
 transition: none

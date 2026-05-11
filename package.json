@@ -3,16 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "slidev build",
-    "ws-preview": "slidev-workspace preview",
-    "ws-build": "slidev-workspace build",
-    "dev:sample": "slidev sample-talk/slides.md --open",
-    "build:sample": "slidev build sample-talk/slides.md",
-    "export:sample": "slidev export sample-talk/slides.md",
-    "dev:mlops": "slidev mlops-south-bay-2026/slides.md --open",
-    "build:mlops": "slidev build mlops-south-bay-2026/slides.md",
-    "export:mlops": "slidev export mlops-south-bay-2026/slides.md",
-    "export:mlops-seattle": "slidev export slides/mlops-seattle-2026/slides.md --format pptx --dark"
+    "preview": "slidev-workspace preview",
+    "build": "slidev-workspace build"
   },
   "devDependencies": {
     "@slidev/cli": "^52.14.1"

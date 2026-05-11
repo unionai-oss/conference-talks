@@ -35,9 +35,9 @@ jobs:
       - name: Prepare deploy folder
         run: rm -rf dist && mkdir dist
 
-      - name: Build all slides and preview app as index
+      - name: Build all slides
         run: |
-          pnpm ws-build
+          pnpm build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
