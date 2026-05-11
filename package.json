@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "preview": "slidev-workspace preview",
-    "build": "slidev-workspace build"
+    "build": "slidev-workspace build",
+    "postbuild": "node scripts/copy-og-images.mjs"
   },
   "devDependencies": {
     "@slidev/cli": "^52.14.1"

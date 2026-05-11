@@ -39,6 +39,9 @@ jobs:
         run: |
           pnpm build
 
+      - name: Copy og-image.png to slide dist roots
+        run: node scripts/copy-og-images.mjs
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
