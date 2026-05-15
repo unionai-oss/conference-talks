@@ -76,6 +76,11 @@ h1, h2, h3, ul, li, p { text-align: left !important; }
 
 </div>
 
+<div style="position: absolute; bottom: 32px; right: 32px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+  <div style="font-size: 0.5rem; font-weight: 500;">Try Flyte Devbox</div>
+  <img src="./static/flyte-qr-code.png" alt="Flyte QR code" style="width: 60px; height: auto; margin: 0 !important;" />
+</div>
+
 ---
 layout: center
 ---
@@ -179,9 +184,9 @@ Scale and production problems aren't problems you solve with a DSL:
 
 <v-clicks>
 
-1. Heterogenous compute requirements: one step uses CPUs, another uses GPUs
-2. OOM containment and handling: only one step consumes 1TB of memory
-3. Isolation of compute and permissions: only one step needs DB access
+1. Heterogenous compute requirements, e.g. one step uses CPUs, another uses GPUs
+2. OOM containment and handling, e.g. only one step consumes 1TB of memory
+3. Isolation of compute and permissions, e.g. only one step needs DB access
 
 </v-clicks>
 
@@ -915,7 +920,7 @@ async def main(data: list[int]) -> float:
     return sum(xs) / len(xs)
 ```
 
-```python
+```python {11}
 # flyte_hello_world.py
 import asyncio
 import flyte
