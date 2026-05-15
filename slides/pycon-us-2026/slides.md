@@ -232,11 +232,23 @@ layout: default
 
 Very different on the surface, but there's a common shape: **overlapping waits** and **isolated compute**.
 
-**🤖 Agentic workflows** — one session becomes **many** round-trips: retrieval, tools, provider APIs, human-in-the-loop hooks; latency is the **sum of overlapped (or serialized) waits**.
+<v-click>
 
-**🔮 Classical ML** — training, batch scoring, calibration, drift checks: **GPU RAM**, **queue depth**, and **fair sharing** decide whether jobs finish *this week* or blow the budget.
+**🤖 Agentic workflows** — one session becomes **many** round-trips: retrieval, tool calls, provider API invocations, human-in-the-loop hooks; latency is the **sum of overlapped (or serialized) waits**.
 
-**📊 ETL** — warehouses, lakes, streams, feature sinks: throughput is **I/O fan-out** and **backpressure**, not "how fast is your `for` loop."
+</v-click>
+
+<v-click>
+
+**🔮 Classical ML** — training, batch inference, HPO: right-sizing compute for **(GPU, CPUs, memory)**, **model throughput**, and **fair resource sharing** decide whether jobs finish *this week* or blow your compute budget.
+
+</v-click>
+
+<v-click>
+
+**📊 ETL** — warehouses, lakes, streams, feature sinks: throughput is governed by **I/O fan-out** and **backpressure**, not how fast your `for` loop runs.
+
+</v-click>
 
 ---
 layout: default
