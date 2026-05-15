@@ -1364,6 +1364,16 @@ layout: center
 layout: center
 ---
 
-# Thank you
+<div style="text-align: center;">
 
-PyCon US 2026
+<h1 style="text-align: center !important;">Thank you</h1>
+
+<div>PyCon US 2026</div>
+
+<br />
+
+<div>Try Flyte Devbox</div>
+
+<img src="./static/flyte-qr-code.png" alt="Flyte QR code" width="20%" style="margin-left: auto; margin-right: auto;" />
+
+</div>
