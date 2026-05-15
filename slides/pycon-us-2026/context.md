@@ -66,6 +66,62 @@ This is the technical core of the talk: a focused tour of the `asyncio` primitiv
     - **Streaming** with `async for` over chunked HTTP/gRPC responses — constant memory vs. buffering full completions.
 - **Ecosystem mirror**: `anyio` and `aioresult` apply the same structured-concurrency ideas across backends — useful when interop with non-`asyncio` libraries is required, but the Python-level idea is the same.
 
+#### Semaphore: a permit counter
+
+A Semaphore(N) is just an integer counter that goes down on acquire() and up on release(). It carries no data. Waiters block when the counter hits zero and are released FIFO as permits return.
+
+```python
+sem = asyncio.Semaphore(8)
+async def fetch(url):
+    async with sem:           # "may I run?"
+        return await client.get(url)
+```
+
+The caller already has the work (url); the semaphore just answers "are you allowed to proceed right now?" It's pure gating.
+
+#### Queue: a value-carrying channel
+
+A Queue(maxsize=N) is a buffer that holds the work itself — producers put() items in, consumers get() them out. It decouples who produces work from who runs it.
+
+```python
+q: asyncio.Queue[str] = asyncio.Queue(maxsize=100)
+async def producer(urls):
+    for u in urls:
+        await q.put(u)                 # blocks when full → backpressure
+async def worker():
+    while True:
+        url = await q.get()            # blocks when empty
+        await fetch(url)
+        q.task_done()
+```
+
+The mental model
+
+| Semaphore | Queue |
+|-----------|-------|
+| Carries data? | No — just permits | Yes — the items themselves |
+| Producer/consumer? | Same coroutine (acquire → work → release) | Different coroutines (producer ↔ consumer) |
+| What "full" means | N tasks already running | N items buffered waiting to be picked up |
+| Typical use | Bound fan-out of calls you already have | Hand off work between different lifecycles |
+| Backpressure source | acquire() blocks new callers | put() blocks producers when buffer is full |
+
+#### When they overlap
+
+A bounded queue + fixed pool of N worker tasks does give you bounded concurrency, just like Semaphore(N) — but you've also bought yourself:
+
+- A buffer (decouples producer/consumer rates).
+- A handoff point (producer can finish and exit; workers keep draining).
+- A natural place to plug in multiple producers or multiple consumers.
+
+Conversely, Semaphore is the right answer when the work isn't being handed off — it's just being throttled at the call site. E.g. inside a single gather(*(fetch(u) for u in urls)), every coroutine has its URL already; you don't need a buffer, you need a permit.
+
+#### Rule of thumb for the talk
+
+- Caller already holds the work, just needs to wait its turn → Semaphore.
+- Work needs to be handed across coroutine boundaries (different rates, fan-in/out, lifecycles) → Queue.
+
+This is also why your slide deck shows them in distinct slots: Semaphore under bounded concurrency (slide ~Backpressure: asyncio.Semaphore), and Queue under throttle point / backpressure between producers and consumers (the asyncio.Queue slide). Both are "backpressure," but they apply at different seams in your program.
+
 **Chapter 3: Containers as the Isolation Boundary (5 minutes)**
 
 `asyncio` is necessary but not sufficient for production AI workflows that need real resource isolation. This chapter is about where the standard library stops and the cluster begins.
