@@ -6,7 +6,7 @@ This repo uses [Slidev](https://sli.dev) to create and present slides from Markd
 
 ```bash
 npm install
-npm run dev
+npm run preview
 ```
 
 Then open the URL shown in the terminal (default: http://localhost:3030).
@@ -15,7 +15,7 @@ Then open the URL shown in the terminal (default: http://localhost:3030).
 
 | Command | Description |
 |--------|-------------|
-| `npm run dev` | Start dev server for sample talk and open in browser |
+| `npm run preview` | Start dev server for sample talk and open in browser |
 | `npm run build` | Build sample talk as static site (e.g. for hosting) |
 | `npm run export` | Export sample talk to PDF, PPTX, or PNGs |
 
