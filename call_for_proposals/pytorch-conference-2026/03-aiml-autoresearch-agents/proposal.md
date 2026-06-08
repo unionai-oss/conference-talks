@@ -12,24 +12,23 @@
 > Paste into Sessionize. Limit: 1200 characters.
 
 "AI that does AI research" sounds like hype — until you break it into parts you
-already know. An autoresearch agent is just a loop: form a hypothesis, write
-PyTorch code, run an experiment, read the metrics, decide what to try next. The
-hard part isn't intelligence; it's making each step verifiable so the loop
-doesn't drift into confident nonsense.
+already know. An autoresearch agent is a loop: form a hypothesis, write PyTorch
+code, run an experiment, read the metrics, decide what to try next. The hard part
+isn't intelligence; it's making each step verifiable so the loop doesn't drift
+into confident nonsense.
 
-This beginner-friendly session builds intuition for autonomous ML research
-agents from the ground up. We start with the manual research loop every
-practitioner runs by hand, then add one piece of automation at a time:
-idea generation, an agent that edits and runs a `torch` training script,
-metric-driven ranking, and a tree search over experiments (the pattern behind
-The AI Scientist and similar systems).
+This beginner-friendly session builds intuition for autonomous ML research agents
+from the ground up. We start with the manual research loop, then add automation
+one step at a time: idea generation, an agent that edits and runs a `torch`
+training script, metric-driven ranking, and tree search over experiments (the
+pattern behind The AI Scientist and similar systems).
 
-Along the way I'll show the design principles that separate a useful research
-agent from a demo: closed action spaces, "thin control over thick state" (the
-File-as-Bus pattern), and verification gates so results are trustworthy. Using
-two concrete case studies — auto-tuning kernels and auto-generating RL
-environments — you'll leave knowing how to put an agent to work on your own
-experiments, and where to keep a human in the loop.
+Along the way I'll show the design principles that separate useful research
+agents from demos: closed action spaces, "thin control over thick state" (the
+File-as-Bus pattern), and verification gates. Through case studies on inventing
+activation functions, designing deep learning layers, and proposing optimization
+functions, you'll learn how to put an agent to work on your own experiments, and
+where to keep a human in the loop.
 
 ---
 
