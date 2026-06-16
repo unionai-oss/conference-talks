@@ -943,6 +943,8 @@ layout: center
 
 Runnable code in `src/` — three agents, one dataset, same four constructs.
 
+https://github.com/unionai-oss/conference-talks/tree/main/slides/tmls-workshop-06152026/src
+
 ```bash
 uv sync
 
@@ -955,16 +957,6 @@ uv run python mle_agent_code_edit.py --n-experiments 4 --num-shards 2
 # Fan-out — code mode + parallel batches
 uv run python mle_agent_code_edit_fanout.py --n-experiments 6 --batch-size 3 --max-turns 50 --num-shards 2
 ```
-
-<v-clicks>
-
-- **`mle_agent.py`** — structured tools + `heal_oom` (`flyte.errors.OOMError`)
-- **`mle_agent_code_edit.py`** — `edit_train_code` + sandbox + `heal_sandbox_oom` (stderr)
-- **`mle_agent_code_edit_fanout.py`** — `code_mode=True` + `run_experiment_batch` + `flyte_map`
-- Shared: `prepare.py`, `train.py`, research tools, reports, `MemoryStore`
-- Re-run with the same `--memory-key` to continue research (and code edits)
-
-</v-clicks>
 
 ---
 layout: center
