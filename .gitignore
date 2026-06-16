@@ -2,3 +2,4 @@ node_modules
 **/dist
 .pnpm-store
 **/*.pptx
+__pycache__
