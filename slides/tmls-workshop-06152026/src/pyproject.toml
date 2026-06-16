@@ -1,0 +1,25 @@
+[project]
+name = "autoresearch-mle-agent"
+version = "0.1.0"
+description = "Autoresearch with an MLE agent — durable, self-healing agents on Flyte (TMLS workshop)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Orchestration + agent toolkit (flyte.ai.agents) and the LLM client.
+    "flyte>=2.0.0b0",
+    "litellm",
+    "httpx",
+    "pydantic-monty",
+    "unionai-sandbox[flyte]",
+    # Same training/data stack as karpathy/autoresearch.
+    "torch",
+    "numpy",
+    "pyarrow",
+    "requests",
+    "tiktoken",
+    "rustbpe",
+]
+
+[tool.uv]
+# These pull in heavy native wheels; only needed at task runtime in the image.
+package = false

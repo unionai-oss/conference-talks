@@ -67,6 +67,21 @@ importers:
         specifier: ^3.5.27
         version: 3.5.32(typescript@5.9.3)
 
+  slides/tmls-workshop-06152026:
+    dependencies:
+      '@slidev/cli':
+        specifier: ^52.14.1
+        version: 52.14.1(@nuxt/kit@3.21.1)(@types/markdown-it@14.1.2)(@types/node@22.19.11)(@vue/compiler-sfc@3.5.32)(lightningcss@1.31.1)(markdown-it-async@2.2.0)(markdown-it@14.1.1)(playwright-chromium@1.58.2)(postcss@8.5.8)
+      '@slidev/theme-default':
+        specifier: latest
+        version: 0.25.0
+      '@slidev/theme-seriph':
+        specifier: latest
+        version: 0.25.0
+      vue:
+        specifier: ^3.5.27
+        version: 3.5.32(typescript@5.9.3)
+
   slides/unionai-talk-06042026:
     dependencies:
       '@slidev/cli':
