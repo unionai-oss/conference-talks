@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,8 +13,10 @@ from typing import Any
 from flyte.ai.agents import MemoryStore, tool
 
 from autoresearch_types import (
+    CONFIG_ONLY_EDIT_LIMIT,
     ExperimentConfig,
     MAX_DEVICE_BATCH_SIZE,
+    MAX_MAX_STEPS,
     MAX_N_EMBD,
     MAX_N_HEAD,
     MAX_N_LAYER,
@@ -51,10 +55,72 @@ def filter_config_overrides(overrides: dict[str, Any] | None) -> dict[str, Any]:
         filtered["n_embd"] = max(1, min(int(filtered["n_embd"]), MAX_N_EMBD))
     if "device_batch_size" in filtered:
         filtered["device_batch_size"] = max(1, min(int(filtered["device_batch_size"]), MAX_DEVICE_BATCH_SIZE))
+    if "max_steps" in filtered:
+        filtered["max_steps"] = max(1, min(int(filtered["max_steps"]), MAX_MAX_STEPS))
     if "n_embd" in filtered and "n_head" in filtered and int(filtered["n_embd"]) % int(filtered["n_head"]) != 0:
         head = int(filtered["n_head"])
         filtered["n_embd"] = (int(filtered["n_embd"]) // head) * head
     return filtered
+
+
+def is_config_only_edit(train_py: str, overrides: dict[str, Any] | None) -> bool:
+    """True when *train_py* differs from baseline only via ``config_overrides`` injection."""
+    baseline = baseline_train_py()
+    filtered = filter_config_overrides(overrides)
+    if not filtered:
+        return normalize_train_py(train_py) == normalize_train_py(baseline)
+    expected = build_train_py_with_config_overrides(baseline, filtered)
+    return normalize_train_py(train_py) == normalize_train_py(expected)
+
+
+def experiment_config_signature(train_py: str, overrides: dict[str, Any] | None) -> str:
+    """Stable hash of effective train code + config overrides for duplicate detection."""
+    filtered = filter_config_overrides(overrides)
+    payload = {
+        "train_py": normalize_train_py(train_py),
+        "overrides": sorted(filtered.items()),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+async def check_duplicate_config(
+    memory_key: str,
+    title: str,
+    train_py: str,
+    overrides: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return duplicate metadata if this config was already run under another title."""
+    sig = experiment_config_signature(train_py, overrides)
+    memory = await MemoryStore.get_or_create.aio(key=memory_key)
+    sigs: dict[str, str] = await memory.read_json.aio("memory/config_signatures.json", default={})
+    prior_title = sigs.get(sig)
+    title_key = title.strip().lower()
+    if prior_title and prior_title.strip().lower() != title_key:
+        return {"duplicate_of": prior_title, "config_signature": sig}
+    return None
+
+
+async def register_config_signature(
+    memory_key: str,
+    title: str,
+    train_py: str,
+    overrides: dict[str, Any] | None,
+    *,
+    actor: str = "mle-autoresearch-code-agent",
+) -> str:
+    """Record the config signature for *title* after a successful edit or run."""
+    sig = experiment_config_signature(train_py, overrides)
+    memory = await MemoryStore.get_or_create.aio(key=memory_key)
+    sigs: dict[str, str] = await memory.read_json.aio("memory/config_signatures.json", default={})
+    sigs[sig] = title
+    await memory.write_json.aio(
+        "memory/config_signatures.json",
+        sigs,
+        actor=actor,
+        reason=f"config signature for {title}",
+    )
+    await memory.save.aio()
+    return sig
 
 
 def build_train_py_with_config_overrides(
@@ -218,6 +284,19 @@ async def _persist_train_edits(
                     "title": title,
                     "saved": False,
                     "error": "train_py or config_overrides is required",
+                }
+            )
+            continue
+        if is_config_only_edit(train_py, config_overrides) and len(index) >= CONFIG_ONLY_EDIT_LIMIT:
+            errors.append(
+                {
+                    "title": title,
+                    "saved": False,
+                    "error": (
+                        f"Batch 2+ requires substantive train.py edits (LR schedule, optimizer, "
+                        f"weight decay, grad clip, etc.), not config_overrides alone. "
+                        f"You already have {len(index)} saved edit(s)."
+                    ),
                 }
             )
             continue
@@ -551,6 +630,7 @@ async def record_experiment_result(
         "val_bpb": float(result["val_bpb"]) if result.get("val_bpb") is not None else None,
         "model_name": result.get("model_name"),
         "n_params": result.get("n_params"),
+        "steps": int(result["steps"]) if result.get("steps") is not None else None,
         "resources": result.get("resources"),
         "oom_retries": int(result.get("oom_retries", 0)),
     }

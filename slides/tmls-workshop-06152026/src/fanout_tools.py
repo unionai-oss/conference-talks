@@ -150,6 +150,7 @@ def evaluate_batch_results_impl(
                 "title": r.get("title"),
                 "val_bpb": r.get("val_bpb"),
                 "model_name": r.get("model_name"),
+                "steps": r.get("steps"),
                 "resources": r.get("resources"),
                 "oom_retries": r.get("oom_retries", 0),
             }

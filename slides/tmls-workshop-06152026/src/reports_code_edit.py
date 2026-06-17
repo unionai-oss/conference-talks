@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from autoresearch_types import DatasetProfile
+from autoresearch_types import DEFAULT_MAX_STEPS, DatasetProfile
 from research_history import format_research_history_for_directive
 
 
@@ -25,8 +25,8 @@ def directive_code_edit(
         f"get_promising_code, record_hypothesis, get_leaderboard, and compare_experiments. "
         f"Each experiment: get_baseline_train_code or read_train_code → edit_train_code → "
         f"record_hypothesis → run_experiment (runs your edited train.py in a sandbox). "
-        f"Use time_budget_sec=45. The platform right-sizes compute and retries on sandbox OOM "
-        f"(inspect stderr on failure).\n\n"
+        f"Use time_budget_sec=45, max_steps={DEFAULT_MAX_STEPS}. The platform right-sizes compute "
+        f"and retries on sandbox OOM (inspect stderr on failure).\n\n"
         "Make each experiment explore a **different idea**: vary architecture "
         "(n_layer, n_head, n_embd), optimization (learning_rate, device_batch_size), and "
         "regularization (dropout) — one or two knobs per run, with a clear hypothesis. "

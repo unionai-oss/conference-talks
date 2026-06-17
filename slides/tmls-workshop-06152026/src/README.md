@@ -97,7 +97,7 @@ uv run python mle_agent.py --n-experiments 10 --max-turns 100 --num-shards 1 --m
 
 uv run python mle_agent_code_edit.py --n-experiments 10 --max-turns 100 --num-shards 1 --memory-key mle-autoresearch-code-001
 
-uv run python mle_agent_code_edit_fanout.py --n-experiments 100 --batch-size 10 --max-turns 1000 --memory-key mle-autoresearch-code-fanout-001 --num-shards 1
+uv run python mle_agent_code_edit_fanout.py --n-experiments 250 --batch-size 10 --max-turns 1000 --memory-key mle-autoresearch-code-fanout-001 --num-shards 4
 ```
 
 > **Fan-out tips:** Code mode needs more turns than JSON tool mode (default

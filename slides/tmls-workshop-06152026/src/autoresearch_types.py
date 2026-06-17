@@ -16,6 +16,10 @@ MAX_N_LAYER = 6
 MAX_N_EMBD = 256
 MAX_N_HEAD = 8
 MAX_DEVICE_BATCH_SIZE = 4
+DEFAULT_MAX_STEPS = 100
+MAX_MAX_STEPS = 500
+# After this many saved edits, config_overrides-only changes are rejected (batch 2+).
+CONFIG_ONLY_EDIT_LIMIT = 3
 
 
 @dataclass
@@ -36,6 +40,7 @@ class ExperimentConfig:
     device_batch_size: int = 2
     learning_rate: float = 3e-4
     time_budget_sec: int = 45
+    max_steps: int = DEFAULT_MAX_STEPS
 
 
 @dataclass
@@ -84,6 +89,7 @@ class LeaderboardEntry:
     n_params: int | None = None
     resources: str | None = None
     oom_retries: int = 0
+    steps: int | None = None
     error: str | None = None
     kept: bool = False
 

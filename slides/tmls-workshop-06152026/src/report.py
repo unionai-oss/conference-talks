@@ -204,6 +204,7 @@ def _leaderboard_body(leaderboard: list[LeaderboardEntry], best: LeaderboardEntr
     rows: list[str] = []
     for e in leaderboard:
         val = f"{e.val_bpb:.6g}" if e.val_bpb is not None else "—"
+        steps = str(e.steps) if e.steps is not None else "—"
         is_best = best is not None and e.index == best.index
         row_cls = ' class="ar-best"' if is_best else ""
 
@@ -226,6 +227,7 @@ def _leaderboard_body(leaderboard: list[LeaderboardEntry], best: LeaderboardEntr
             f"<td>{e.index}</td>"
             f"<td><strong>{title_cell}</strong></td>"
             f"<td style='font-variant-numeric:tabular-nums;font-weight:600'>{val}</td>"
+            f"<td style='font-variant-numeric:tabular-nums'>{steps}</td>"
             f"<td>{_esc(e.model_name or '—')}</td>"
             f"<td><code>{_esc(e.resources or '—')}</code></td>"
             f"<td>{oom}</td>"
@@ -233,11 +235,11 @@ def _leaderboard_body(leaderboard: list[LeaderboardEntry], best: LeaderboardEntr
             f"</tr>"
         )
 
-    body = "".join(rows) or f"<tr><td colspan='7' style='padding:14px;color:{SLATE}'>No experiments yet.</td></tr>"
+    body = "".join(rows) or f"<tr><td colspan='8' style='padding:14px;color:{SLATE}'>No experiments yet.</td></tr>"
     table = (
         '<table class="ar-table">'
         "<thead><tr>"
-        "<th>#</th><th>Experiment</th><th>val_bpb</th><th>Model</th>"
+        "<th>#</th><th>Experiment</th><th>val_bpb</th><th>Steps</th><th>Model</th>"
         "<th>Resources</th><th>OOM</th><th>Status</th>"
         "</tr></thead><tbody>"
         f"{body}</tbody></table>"

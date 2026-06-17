@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from autoresearch_types import (
+    DEFAULT_MAX_STEPS,
     DatasetProfile,
     LeaderboardEntry,
     MAX_DEVICE_BATCH_SIZE,
@@ -38,6 +39,7 @@ def _entry_from_result(data: dict[str, Any], index: int, running_min: float) -> 
         val_bpb=val,
         model_name=data.get("model_name"),
         n_params=data.get("n_params"),
+        steps=int(data["steps"]) if data.get("steps") is not None else None,
         resources=data.get("resources"),
         oom_retries=int(data.get("oom_retries", 0)),
         kept=kept,
@@ -164,6 +166,7 @@ def parse_leaderboard(
                     "title": title,
                     "val_bpb": float(val),
                     "model_name": row.get("model_name"),
+                    "steps": row.get("steps"),
                     "resources": row.get("resources"),
                     "oom_retries": row.get("oom_retries", 0),
                 }
@@ -192,7 +195,7 @@ def directive(
         f"Run {n_experiments} experiments to minimize val_bpb on the climbmix corpus "
         f"({profile.n_parquet_files} parquet shards, vocab_size={profile.vocab_size}, "
         f"seq_len=512). Use memory_key={memory_key!r} for record_hypothesis, get_leaderboard, and "
-        f"compare_experiments. Use time_budget_sec=45 for each run. "
+        f"compare_experiments. Use time_budget_sec=45 and max_steps={DEFAULT_MAX_STEPS} for each run. "
         f"Workshop limits: n_layer<={MAX_N_LAYER}, n_embd<={MAX_N_EMBD}, "
         f"n_head<={MAX_N_HEAD}, device_batch_size<={MAX_DEVICE_BATCH_SIZE}. "
         f"Baseline: 3 layers, 128 embd, batch 2. Start with inspect_dataset, then follow the "

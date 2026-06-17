@@ -170,7 +170,7 @@ def run_training(config: ExperimentConfig) -> ExperimentResult:
     t0 = time.time()
     model.train()
     steps = 0
-    while time.time() - t0 < config.time_budget_sec:
+    while steps < config.max_steps and time.time() - t0 < config.time_budget_sec:
         x, y, _ = next(train_loader)
         x = x.to(device)
         y = y.to(device)
@@ -194,7 +194,7 @@ def run_training(config: ExperimentConfig) -> ExperimentResult:
         device=device.type,
         config=config,
         notes=(
-            f"val_bpb (lower better); device={device.type}; steps={steps}; "
+            f"val_bpb (lower better); device={device.type}; steps={steps}/{config.max_steps}; "
             f"params={n_params:,}; batch={config.device_batch_size}; lr={config.learning_rate}; "
             f"time_budget_s={config.time_budget_sec}"
         ),

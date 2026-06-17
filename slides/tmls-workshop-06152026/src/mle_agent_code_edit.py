@@ -32,6 +32,7 @@ from call_handlers_sandbox import heal_sandbox_oom
 from llm_call import call_llm
 from code_edit_tools import (
     MEMORY_KEY,
+    check_duplicate_config,
     edit_train_code,
     get_baseline_train_code,
     get_code_edit_history,
@@ -42,6 +43,7 @@ from code_edit_tools import (
     read_train_code,
     record_experiment_result,
     record_promising_run,
+    register_config_signature,
 )
 from report import (
     render_activity_log,
@@ -73,7 +75,7 @@ MODEL = "claude-sonnet-4-5"
 @experiment_env.task
 async def run_experiment(
     title: str,
-    time_budget_sec: int = 60,
+    time_budget_sec: int = 45,
     memory_key: str = MEMORY_KEY,
 ) -> dict:
     """Train using the agent-edited ``train.py`` for this title inside a sandbox.
@@ -95,6 +97,19 @@ async def run_experiment(
     """
     train_py = await load_train_code(memory_key, title)
     config_overrides = await load_config_overrides(memory_key, title)
+    duplicate = await check_duplicate_config(memory_key, title, train_py, config_overrides)
+    if duplicate:
+        result = {
+            "success": False,
+            "title": title,
+            "error": (
+                f"Duplicate config of '{duplicate['duplicate_of']}' "
+                f"(signature {duplicate['config_signature']}); change train.py or overrides."
+            ),
+            "duplicate_of": duplicate["duplicate_of"],
+        }
+        await record_experiment_result(memory_key, result)
+        return result
     bundle = await build_bundle()
     cache_dir = await materialize_cache(bundle)
 
@@ -108,6 +123,7 @@ async def run_experiment(
 
     if result.get("success"):
         await record_promising_run(memory_key, title, result)
+        await register_config_signature(memory_key, title, train_py, config_overrides)
 
     await record_experiment_result(memory_key, result)
     return result

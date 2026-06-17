@@ -26,10 +26,11 @@ import flyte.errors
 import flyte.report
 from flyte.ai.agents import Agent, MemoryStore, agent_progress_cb, tool
 
-from autoresearch_types import AutoresearchOutput, DEFAULT_NUM_SHARDS, MAX_DEVICE_BATCH_SIZE, MAX_N_EMBD, MAX_N_HEAD, MAX_N_LAYER
+from autoresearch_types import AutoresearchOutput, DEFAULT_MAX_STEPS, DEFAULT_NUM_SHARDS, MAX_DEVICE_BATCH_SIZE, MAX_N_EMBD, MAX_N_HEAD, MAX_N_LAYER
 from bundle import agent_env, build_bundle, experiment_env, materialize_cache, profile_bundle
-from call_handlers import RESOURCE_FLOOR, _bump_memory
+from call_handlers import RESOURCE_FLOOR, bump_memory
 from code_edit_tools import (
+    check_duplicate_config,
     edit_train_code,
     edit_train_code_batch,
     get_baseline_train_code,
@@ -41,6 +42,7 @@ from code_edit_tools import (
     read_train_code,
     record_experiment_result,
     record_promising_run,
+    register_config_signature,
 )
 from llm_call import call_llm
 from fanout_tools import (
@@ -72,7 +74,7 @@ from research_tools import (
 )
 from sandbox_runner import run_train_in_sandbox
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-4-6"
 MAX_OOM_RETRIES = 3
 
 
@@ -84,6 +86,23 @@ async def _run_experiment_body(
     """Execute one sandbox training run (no OOM retry — used as a mapped sub-task)."""
     train_py = await load_train_code(memory_key, title)
     config_overrides = await load_config_overrides(memory_key, title)
+    duplicate = await check_duplicate_config(memory_key, title, train_py, config_overrides)
+    if duplicate:
+        result = {
+            "success": False,
+            "title": title,
+            "error": (
+                f"Duplicate config of '{duplicate['duplicate_of']}' "
+                f"(signature {duplicate['config_signature']}); change train.py or overrides."
+            ),
+            "duplicate_of": duplicate["duplicate_of"],
+        }
+        await record_experiment_result(
+            memory_key,
+            result,
+            actor="mle-autoresearch-code-fanout-agent",
+        )
+        return result
     bundle = await build_bundle()
     cache_dir = await materialize_cache(bundle)
     result = await run_train_in_sandbox(
@@ -95,6 +114,13 @@ async def _run_experiment_body(
     )
     if result.get("success"):
         await record_promising_run(memory_key, title, result)
+        await register_config_signature(
+            memory_key,
+            title,
+            train_py,
+            config_overrides,
+            actor="mle-autoresearch-code-fanout-agent",
+        )
     await record_experiment_result(
         memory_key,
         result,
@@ -106,7 +132,7 @@ async def _run_experiment_body(
 @experiment_env.task
 async def run_experiment_body(
     title: str,
-    time_budget_sec: int = 60,
+    time_budget_sec: int = 45,
     memory_key: str = MEMORY_KEY_FANOUT,
 ) -> dict:
     """Run one edited ``train.py`` inside a sandbox (mapped sub-task)."""
@@ -116,7 +142,7 @@ async def run_experiment_body(
 @experiment_env.task
 async def run_experiment(
     title: str,
-    time_budget_sec: int = 60,
+    time_budget_sec: int = 45,
     memory_key: str = MEMORY_KEY_FANOUT,
 ) -> dict:
     """Train using agent-edited ``train.py`` with platform OOM self-healing.
@@ -135,7 +161,7 @@ async def run_experiment(
         except flyte.errors.OOMError:
             if attempt >= MAX_OOM_RETRIES:
                 raise
-            resources = _bump_memory(resources)
+            resources = bump_memory(resources)
             attempt += 1
             flyte.logger.warning(
                 "run_experiment Flyte OOM for %s; retry memory=%s",
@@ -151,7 +177,7 @@ async def run_experiment(
         if isinstance(result, dict) and result.get("oom"):
             if attempt >= MAX_OOM_RETRIES:
                 return result
-            resources = _bump_memory(resources)
+            resources = bump_memory(resources)
             attempt += 1
             flyte.logger.warning(
                 "run_experiment sandbox OOM for %s; retry memory=%s",
@@ -167,7 +193,7 @@ async def run_experiment(
 @agent_env.task
 async def run_experiment_batch(
     titles: list[str],
-    time_budget_sec: int = 60,
+    time_budget_sec: int = 45,
     memory_key: str = MEMORY_KEY_FANOUT,
     concurrency: int = 4,
     batch_id: str = "",
@@ -220,12 +246,22 @@ Core tools (same as the single-threaded code-edit agent):
 - run_experiment — one sandbox training run (OOM-healed by the platform)
 
 Saving edits (required for visible diffs and distinct runs):
-- Prefer ``edit_train_code_batch(edits=[{"title": "...", "config_overrides": {"n_layer": 6}, "change_summary": "..."}])``
-  over pasting unchanged baseline ``train_py``.
-- ``config_overrides`` accepts ``ExperimentConfig`` fields: ``n_layer``, ``n_head``, ``n_embd``,
-  ``dropout``, ``device_batch_size``, ``learning_rate``, ``time_budget_sec``.
-- To fork a winner: set ``parent_title`` to the best title and pass new ``config_overrides``.
+- **Batch 1 only:** you may use ``config_overrides`` for a quick architecture/LR sweep via
+  ``edit_train_code_batch(edits=[{{"title": "...", "config_overrides": {{"n_layer": 6}}, "change_summary": "..."}}])``.
+- **Batch 2 and later:** every edit must include a **substantive ``train_py`` change**
+  (learning-rate schedule, optimizer/weight_decay, grad clipping, warmup, etc.).
+  ``config_overrides`` alone is **rejected** after the first batch — fork with
+  ``parent_title`` and edit the training loop in ``train_py``.
+- ``config_overrides`` fields: ``n_layer``, ``n_head``, ``n_embd``, ``dropout``,
+  ``device_batch_size``, ``learning_rate``, ``time_budget_sec``, ``max_steps``.
+- To fork a winner: set ``parent_title`` to the best title, then edit ``train_py``.
 - Do **not** save baseline ``train.py`` without overrides — the platform rejects identical edits.
+- Duplicate configs (same effective train.py + overrides) are rejected at run time.
+
+Training budget (fair comparison across architectures):
+- Default **max_steps={DEFAULT_MAX_STEPS}** with **time_budget_sec=45** as a safety cap.
+  All models train for the same step count unless they hit the wall-clock limit.
+- Check ``steps`` in batch results — if a run stopped early on time, the model may be too large.
 
 Batch / fan-out tools:
 - record_batch_plan(batch_id, experiments) — persist a multi-experiment plan
@@ -246,19 +282,21 @@ Typical batch loop (aim for **≤8 code turns** before your plain-text summary):
 1. Turn 1: ``get_baseline_train_code()`` + ``inspect_dataset()``.
 2. Turn 2: ``record_batch_plan`` then ``edit_train_code_batch(edits=[...])`` for the whole batch.
 3. Turn 3: ``record_batch_hypotheses`` + ``run_experiment_batch(titles, concurrency=...)``.
-4. Turn 4+: fork winners into the next batch, or reply in **plain text** when done.
+4. Turn 4+: fork winners into the next batch with **train.py** edits, or reply in plain text when done.
 
 Batch diversity (required):
 - Every title in a batch must test a **distinct hypothesis** — no duplicate configs or renames.
-- **Spread axes across the batch**: e.g. one edit tweaks ``learning_rate``, another ``n_layer`` /
-  ``n_embd`` / ``n_head``, another ``dropout`` or ``device_batch_size``. Avoid running three
-  near-identical models that only differ by ±1 layer.
-- Vary **one or two knobs per edit** in ``ExperimentConfig``; state the change in
-  ``change_summary`` and in ``record_batch_hypotheses``.
-- When forking a batch winner, the **next batch** should still explore new directions (LR sweep,
-  width vs depth tradeoffs, regularization) — not clones of the leader.
-- Use ``evaluate_batch_results`` to compare **which axis** helped, then design the next batch
-  around under-explored knobs.
+- **Spread axes across the batch**: e.g. one edit tweaks depth/width, another changes the
+  **training loop** (cosine LR, AdamW betas, weight decay), another regularization or batch size.
+- Avoid LR micro-sweeps (±30% of the current best LR) after batch 1 — those rarely beat a plateau.
+- Vary **one or two knobs per edit**; state the change in ``change_summary`` and
+  ``record_batch_hypotheses``.
+- Use ``evaluate_batch_results`` to see **which axis** helped, then explore under-tested axes.
+
+Plateau rule (required):
+- If **3 consecutive batches** fail to beat the global best val_bpb by more than **0.01**,
+  stop hyperparameter micro-sweeps. Switch to **training-loop code edits** in ``train.py``
+  (scheduler, optimizer, regularization, data/loss changes).
 
 Rules:
 - Prefer ``edit_train_code_batch`` over repeated ``edit_train_code`` when saving 2+ titles.

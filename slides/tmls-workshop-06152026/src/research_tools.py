@@ -14,10 +14,12 @@ from typing import Any
 from flyte.ai.agents import MemoryStore, tool
 
 from autoresearch_types import (
+    DEFAULT_MAX_STEPS,
     DEFAULT_NUM_SHARDS,
     DatasetProfile,
     HypothesisEntry,
     MAX_DEVICE_BATCH_SIZE,
+    MAX_MAX_STEPS,
     MAX_N_EMBD,
     MAX_N_HEAD,
     MAX_N_LAYER,
@@ -134,6 +136,7 @@ async def validate_experiment_config(
     device_batch_size: int = 2,
     learning_rate: float = 3e-4,
     time_budget_sec: int = 45,
+    max_steps: int = DEFAULT_MAX_STEPS,
     vocab_size: int = 8192,
 ) -> dict:
     """Validate a proposed experiment config before calling run_experiment.
@@ -149,7 +152,8 @@ async def validate_experiment_config(
         dropout: Dropout probability.
         device_batch_size: Sequences per training step.
         learning_rate: AdamW learning rate.
-        time_budget_sec: Wall-clock training budget in seconds.
+        time_budget_sec: Wall-clock training budget in seconds (safety cap).
+        max_steps: Training steps before stopping (default {DEFAULT_MAX_STEPS}; fair across architectures).
         vocab_size: Vocabulary size (default matches the prepared tokenizer).
 
     Returns:
@@ -180,6 +184,10 @@ async def validate_experiment_config(
         errors.append("learning_rate must be > 0")
     if time_budget_sec < 10:
         errors.append("time_budget_sec should be at least 10 for meaningful training")
+    if max_steps < 1:
+        errors.append("max_steps must be >= 1")
+    if max_steps > MAX_MAX_STEPS:
+        errors.append(f"max_steps must be <= {MAX_MAX_STEPS} (workshop limit)")
     return {
         "title": title,
         "valid": not errors,

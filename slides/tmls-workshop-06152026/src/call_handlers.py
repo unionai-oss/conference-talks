@@ -144,6 +144,11 @@ def _ensure_oom_increase(resources: flyte.Resources, previous: flyte.Resources) 
     return _cap_resources(resources)
 
 
+def bump_memory(resources: flyte.Resources) -> flyte.Resources:
+    """Deterministic memory bump after OOM (inline retry loops without an LLM)."""
+    return _ensure_oom_increase(resources, resources)
+
+
 def _sizing_payload(
     args: dict[str, Any],
     *,
