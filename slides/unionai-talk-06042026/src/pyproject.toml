@@ -1,0 +1,18 @@
+[project]
+name = "unionai-talk-devbox-examples"
+version = "0.1.0"
+description = "Flyte 2 devbox examples for the Union AI asyncio talk"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flyte>=2.5.1",
+    "flyteplugins-anthropic>=2.5.1",
+]
+
+[project.optional-dependencies]
+anthropic = [
+    "flyteplugins-anthropic>=2.5.1",
+]
+
+[tool.uv]
+package = false

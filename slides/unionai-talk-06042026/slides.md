@@ -128,7 +128,7 @@ It ~~calls~~ creates **three** ~~**LLM providers**~~ **datasets** in parallel, f
 
 - ✅ On your laptop with **10 inputs**: works beautifully.
 - 💥 In production with **10,000 inputs** and a real rate limit: it falls over.
-- 🌀 DB connetions pile up. One slow connection stalls the whole batch.
+- 🌀 DB connections pile up. One slow connection stalls the whole batch.
 - 😵 An OOM in a heavy processing step kills the entire process.
 - 🤷 You can't back-pressure inbound work without rewriting half of it.
 
@@ -300,7 +300,8 @@ layout: default
 | **Classical ML** | Async clients to **batch schedulers**, online inference, feature stores | **GPU** pools, **deadlines / job timeouts**, crash isolation so one bad batch doesn't take down the hub |
 | **Agents** | **`TaskGroup`**-shaped tool graphs, rate limits, streaming responses | Sandboxed tool execution, **horizontal** replicas, blast-radius limits per tenant, data/ML agents need compute |
 
-One line for the room: **event loop coordinates**; **container orchestrator isolates**.
+
+<!-- One line for the room: **event loop coordinates**; **container orchestrator isolates**. -->
 
 ---
 layout: default
@@ -367,7 +368,7 @@ layout: center
 
 <br>
 
-### Backed container orchestration, asyncio can be a great fit for compute-bound code as well
+### Backed by container orchestration, `asyncio` can be a great fit for compute-bound code as well
 
 </v-click>
 
@@ -806,12 +807,20 @@ Concurrency is **necessary but not sufficient** for production AI at scale.
 
 It cannot, by itself:
 
+<v-clicks>
+
 - ☁️ Provision **GPUs** for a model training step.
 - 💥 Give you **OOM containment** when a tool call blows past memory.
 - 👥 Isolate a **noisy tenant** from the rest of your platform.
 - ↔️ Scale **horizontally** without you rewriting the mental model.
 
+</v-clicks>
+
+<v-click>
+
 These are **scheduler-level** concerns, not **language-level** concerns.
+
+</v-click>
 
 ---
 layout: default
@@ -821,12 +830,20 @@ layout: default
 
 **Hard boundaries** — the bits asyncio explicitly delegates:
 
+<v-clicks>
+
 - **GPU/CPU pools**, memory quotas.
 - **OOM containment** — one OOM doesn't have to take down the entire run.
 - **Tenancy** & blast-radius limits per project / per workload.
 - **Job-level retries** & deadlines, replicas that scale on their own.
 
+</v-clicks>
+
+<v-click>
+
 The thing they don't change: **your user code** doesn't have to change to conform to a different concurrency paradigm.
+
+</v-click>
 
 ---
 layout: default
@@ -836,11 +853,19 @@ layout: default
 
 When you need isolation, `asyncio` doesn't disappear — it becomes the **client**.
 
+<v-clicks>
+
 - **`async def` inside the service** talks to **queues, provider APIs, and cluster APIs**.
 - **Pods** hold the **heavy or risky** pieces (training, sandboxed tool execution, anything GPU- or OOM-bound).
 - **Where** a piece of work runs is **runtime configuration**, not a second concurrency model in your source.
 
+</v-clicks>
+
+<v-click>
+
 You write Python. The cluster handles isolation. The user-facing programming model stays `async def`.
+
+</v-click>
 
 ---
 layout: section
@@ -1125,7 +1150,7 @@ layout: default
 
 # Logical execution path
 
-```mermaid {theme: 'light'}
+```mermaid {theme: 'dark'}
 sequenceDiagram
   participant App as Your asyncio task
   participant Drv as In-process driver loop
@@ -1266,7 +1291,13 @@ Let's make a PBJ sandwich!
 layout: section
 ---
 
-# Call to action
+# Demo time!
+
+---
+layout: section
+---
+
+# Call to action 
 
 ---
 layout: center
@@ -1281,7 +1312,7 @@ If you want to fully use or debug or understand the internals of any of these li
 </div>
 
 <div class="logo-cell">
-  <img src="https://pydantic.dev/docs/ai/img/pydantic-ai-light.svg" alt="Pydantic AI logo" />
+  <img src="https://pydantic.dev/docs/ai/img/pydantic-ai-dark.svg" alt="Pydantic AI logo" />
 </div>
 
 <div class="logo-cell">
@@ -1289,7 +1320,7 @@ If you want to fully use or debug or understand the internals of any of these li
 </div>
 
 <div class="logo-cell">
-  <img src="https://docs.vllm.ai/en/latest/assets/logos/vllm-logo-text-light.png" alt="vLLM logo" />
+  <img src="https://docs.vllm.ai/en/latest/assets/logos/vllm-logo-text-dark.png" alt="vLLM logo" />
 </div>
 
 <div class="logo-cell">
@@ -1382,8 +1413,6 @@ layout: center
 <div style="text-align: center;">
 
 <h1 style="text-align: center !important;">Thank you</h1>
-
-<div>PyCon US 2026</div>
 
 <br />
 
